@@ -1,0 +1,1031 @@
+@font-face {
+  font-family: 'MerchantCopy';
+  src: url('./MerchantCopy.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'MerchantCopy', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  font-size: 18px;
+}
+
+/* Apply MerchantCopy to all text elements except FontAwesome icons */
+body, div, span, h1, h2, h3, h4, h5, h6, p, a, button, input, textarea, select {
+  font-family: 'MerchantCopy', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Preserve FontAwesome icons */
+i, .fa, .fas, .far, .fab {
+  font-family: 'Font Awesome 6 Free', 'Font Awesome 6 Brands' !important;
+}
+
+.app {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(to bottom, #1a1a2e 0%, #0f0f1e 100%);
+  overflow: hidden;
+  position: relative;
+}
+
+.game-box {
+  width: 90%;
+  max-width: 1400px;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.5s ease;
+  overflow: hidden;
+  border-radius: 20px;
+  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+.app.loading {
+  align-items: center;
+  justify-content: center;
+  background-color: #90EE90;
+}
+
+.game-header {
+  padding: 15px;
+  background: rgba(0, 0, 0, 0.95);
+  color: white;
+  text-align: center;
+  border-bottom: 4px solid #000;
+  box-shadow: 0 4px 0 rgba(255, 215, 0, 0.3);
+  position: relative;
+  z-index: 20;
+}
+
+.game-title {
+  margin: 0 0 10px 0;
+  font-size: 36px;
+  font-weight: 900;
+  color: #FFD700;
+  text-shadow:
+    2px 2px 0px #000,
+    4px 4px 0px #FF6B00;
+  letter-spacing: 1px;
+}
+
+.stats {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.stat {
+  display: flex;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+  align-items: center;
+}
+
+.stat-label {
+  opacity: 0.9;
+}
+
+.stat-value {
+  color: #FFD700;
+}
+
+/* Big Depth Display */
+.depth-display {
+  padding: 20px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.3) 100%);
+  border-bottom: 4px solid rgba(255, 215, 0, 0.5);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.depth-label {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+  margin-bottom: 5px;
+}
+
+.depth-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+}
+
+.depth-number {
+  font-size: 56px;
+  font-weight: 900;
+  color: #FFD700;
+  text-shadow:
+    3px 3px 0px #FF6B00,
+    5px 5px 10px rgba(0, 0, 0, 0.8),
+    0 0 20px rgba(255, 215, 0, 0.5);
+  letter-spacing: 2px;
+  font-family: 'Impact', 'Arial Black', sans-serif;
+  line-height: 1;
+  animation: depthPulse 2s ease-in-out infinite;
+}
+
+.depth-unit {
+  font-size: 32px;
+  font-weight: bold;
+  color: #FFA500;
+  text-shadow:
+    2px 2px 0px #FF6B00,
+    3px 3px 6px rgba(0, 0, 0, 0.8);
+  letter-spacing: 1px;
+  font-family: 'Impact', 'Arial Black', sans-serif;
+  animation: unitBounce 1s ease-in-out infinite;
+}
+
+@keyframes depthPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+@keyframes unitBounce {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.game-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  position: relative;
+  background-color: #3d2817;
+  background-image: url('../public/dirtwall.webp');
+  background-repeat: repeat;
+  background-size: auto;
+  image-rendering: pixelated;
+}
+
+.game-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.game-content > * {
+  position: relative;
+  z-index: 2;
+}
+
+.background-ores {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.background-ore {
+  position: absolute;
+  opacity: 0.4;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.dig-area {
+  padding: 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 20px;
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+
+
+.mining-scene {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0px;
+}
+
+.character-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.character-sprite {
+  width: 384px;
+  height: 384px;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-size: 3072px 3072px; /* Scale to 3x */
+  filter: drop-shadow(0 0 30px rgba(255, 215, 0, 0.25))
+          drop-shadow(0 0 60px rgba(255, 215, 0, 0.15))
+          drop-shadow(0 0 90px rgba(255, 215, 0, 0.08));
+}
+
+.ore-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  margin-top: -120px;
+}
+
+.ore-container:hover {
+  transform: scale(1.05);
+}
+
+.current-ore {
+  width: 100px;
+  height: 100px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.3))
+          drop-shadow(0 0 50px rgba(255, 215, 0, 0.2))
+          drop-shadow(0 0 75px rgba(255, 215, 0, 0.1));
+}
+
+.ore-label {
+  font-size: 18px;
+  font-weight: bold;
+  color: white;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 6px 14px;
+  border-radius: 12px;
+}
+
+.shop-section {
+  margin-bottom: 20px;
+}
+
+.shop-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shop-item {
+  padding: 12px 15px;
+  background: linear-gradient(180deg, #90EE90 0%, #6FBF6F 100%);
+  border: 4px solid #000;
+  box-shadow:
+    4px 4px 0px #000,
+    inset -2px -2px 0px rgba(0, 0, 0, 0.2),
+    inset 2px 2px 0px rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  text-align: left;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shop-item:hover:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow:
+    2px 2px 0px #000,
+    inset -2px -2px 0px rgba(0, 0, 0, 0.2),
+    inset 2px 2px 0px rgba(255, 255, 255, 0.5);
+}
+
+.shop-item:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.shop-item.affordable {
+  background: linear-gradient(180deg, #90EE90 0%, #228B22 100%);
+  border-color: #000;
+}
+
+.shop-item.expensive {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.shop-item.owned {
+  background: linear-gradient(180deg, #FFD700 0%, #FF8C00 100%);
+  border-color: #000;
+  cursor: default;
+}
+
+.shop-item.obsolete {
+  opacity: 0.3;
+  background: linear-gradient(180deg, #696969 0%, #2F4F4F 100%);
+  cursor: not-allowed;
+}
+
+.shop-item:disabled {
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-ore-icon {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+
+.item-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.item-name {
+  font-weight: bold;
+  font-size: 22px;
+  color: #000;
+  text-shadow: 1px 1px 0px rgba(255, 255, 255, 0.5);
+}
+
+.item-stats {
+  font-size: 18px;
+  color: #333;
+  margin-top: 2px;
+}
+
+.item-cost-btn {
+  padding: 12px 24px;
+  background: linear-gradient(180deg, #FFD700 0%, #FFA500 100%);
+  border: 3px solid #000;
+  box-shadow:
+    3px 3px 0px #000,
+    inset -1px -1px 0px rgba(0, 0, 0, 0.2),
+    inset 1px 1px 0px rgba(255, 255, 255, 0.5);
+  font-size: 20px;
+  font-weight: bold;
+  color: #000;
+  text-shadow: 1px 1px 0px rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.shop-item.owned .item-cost {
+  color: #4CAF50;
+}
+
+
+/* Ore Chart Button */
+.ore-chart-btn {
+  padding: 8px 15px;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.ore-chart-btn:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Ore Chart Modal */
+.ore-chart-modal {
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.ore-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ore-item {
+  display: grid;
+  grid-template-columns: 40px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  border-left: 4px solid;
+}
+
+.ore-item.rarity-basic {
+  border-left-color: #808080;
+}
+
+.ore-item.rarity-common {
+  border-left-color: #00FF00;
+}
+
+.ore-item.rarity-uncommon {
+  border-left-color: #1E90FF;
+}
+
+.ore-item.rarity-rare {
+  border-left-color: #9370DB;
+}
+
+.ore-item.rarity-epic {
+  border-left-color: #FF00FF;
+}
+
+.ore-item.rarity-legendary {
+  border-left-color: #FFD700;
+}
+
+.ore-item.rarity-mythic {
+  border-left-color: #FF0000;
+}
+
+.ore-icon {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+}
+
+.ore-name {
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.ore-value {
+  color: #FFD700;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.ore-count {
+  color: #AAA;
+  font-size: 16px;
+}
+
+/* Ore Spawn Area */
+.ore-spawn-area {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.spawned-ore {
+  position: absolute;
+  cursor: pointer;
+  pointer-events: all;
+  transition: transform 0.2s;
+  image-rendering: pixelated;
+  animation: oreAppear 0.3s ease-out;
+}
+
+.spawned-ore.large {
+  width: 48px;
+  height: 48px;
+}
+
+.spawned-ore.small {
+  width: 32px;
+  height: 32px;
+}
+
+.spawned-ore:hover {
+  transform: scale(1.1);
+  filter: brightness(1.3);
+}
+
+@keyframes oreAppear {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.dig-area {
+  position: relative;
+}
+
+/* Upcoming ores stack */
+.upcoming-ores {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -20px;
+  position: relative;
+}
+
+.upcoming-ore {
+  width: 48px;
+  height: 48px;
+  image-rendering: pixelated;
+  opacity: 0.6;
+  filter: brightness(0.8);
+  margin-top: -35px;
+  position: relative;
+}
+
+.upcoming-ore:first-child {
+  margin-top: 0;
+  opacity: 0.8;
+}
+
+.upcoming-ore:nth-child(2) {
+  opacity: 0.7;
+}
+
+.upcoming-ore:nth-child(3) {
+  opacity: 0.6;
+}
+
+.upcoming-ore:nth-child(4) {
+  opacity: 0.5;
+}
+
+.upcoming-ore:nth-child(5) {
+  opacity: 0.4;
+}
+
+/* Mining layout */
+.manual-mining-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  min-width: 220px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 12px;
+  padding: 20px;
+  background: transparent;
+  box-shadow: none;
+  position: relative;
+  z-index: 10;
+}
+
+/* Pixelated Button Style */
+.pixel-btn {
+  padding: 10px 20px;
+  background: linear-gradient(180deg, #4CAF50 0%, #2E7D32 100%);
+  color: white;
+  border: 3px solid #000;
+  border-radius: 4px;
+  box-shadow:
+    3px 3px 0px #000,
+    inset -2px -2px 0px rgba(0, 0, 0, 0.3),
+    inset 2px 2px 0px rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.pixel-btn:hover {
+  transform: translate(2px, 2px);
+  box-shadow:
+    2px 2px 0px #000,
+    inset -2px -2px 0px rgba(0, 0, 0, 0.3),
+    inset 2px 2px 0px rgba(255, 255, 255, 0.3);
+}
+
+.pixel-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.shop-btn {
+  background: linear-gradient(180deg, #FFD700 0%, #FF8C00 100%);
+}
+
+/* Modal Overlay and Content */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background: linear-gradient(135deg, #2C1810 0%, #1A0F0A 100%);
+  border: 6px solid #FFD700;
+  box-shadow:
+    0 0 0 3px #000,
+    0 0 40px rgba(255, 215, 0, 0.5),
+    inset 0 0 30px rgba(0, 0, 0, 0.5);
+  max-width: 800px;
+  max-height: 90vh;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    transform: scale(0.8) translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: linear-gradient(180deg, #3D2314 0%, #2C1810 100%);
+  border-bottom: 4px solid #FFD700;
+}
+
+.modal-header h2 {
+  font-size: 28px;
+  margin: 0;
+  color: #FFD700;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+.modal-title {
+  font-size: 32px;
+  font-weight: 900;
+  color: #FFD700;
+  text-shadow:
+    2px 2px 0px #000,
+    0 0 10px rgba(255, 215, 0, 0.5);
+  margin: 0;
+}
+
+.close-btn {
+  background: linear-gradient(180deg, #DC143C 0%, #8B0000 100%);
+  border: 4px solid #000;
+  box-shadow: 4px 4px 0px #000;
+  min-width: 50px;
+  font-size: 24px;
+  padding: 10px 15px;
+  color: white;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  font-weight: bold;
+}
+
+.close-btn:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px #000;
+}
+
+.close-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-body::-webkit-scrollbar {
+  width: 12px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: #1A0F0A;
+  border: 2px solid #000;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #FFD700 0%, #FF8C00 100%);
+  border: 2px solid #000;
+}
+
+/* Shop Tabs */
+.shop-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 3px solid #FFD700;
+}
+
+.shop-tab {
+  flex: 1;
+  padding: 15px;
+  background: linear-gradient(180deg, #3D2314 0%, #2C1810 100%);
+  border: none;
+  border-bottom: 4px solid transparent;
+  color: rgba(255, 215, 0, 0.5);
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: bold;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.shop-tab:hover {
+  color: rgba(255, 215, 0, 0.8);
+  background: linear-gradient(180deg, #4D3324 0%, #3C281A 100%);
+}
+
+.shop-tab.active {
+  color: #FFD700;
+  border-bottom-color: #FFD700;
+  background: linear-gradient(180deg, #5D4334 0%, #4C382A 100%);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+}
+
+.shop-tab i {
+  font-size: 20px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: #FFD700;
+  text-shadow: 2px 2px 0px #000;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 3px dashed #FFD700;
+}
+
+/* Falling ores background effect (like Cookie Clicker) */
+.falling-ores-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+  border-radius: 20px;
+}
+
+.falling-ore {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  top: -100px;
+  opacity: 0.08;
+  animation: oreFall linear forwards;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+@keyframes oreFall {
+  0% {
+    top: -100px;
+    transform: rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.8;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    top: 110vh;
+    transform: rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* Ore spark effect */
+.ore-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.ore-spark {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  pointer-events: none;
+  animation: sparkBurst 0.6s ease-out forwards;
+  transform-origin: center;
+  left: 50%;
+  top: 50%;
+  margin-left: -16px;
+  margin-top: -16px;
+}
+
+@keyframes sparkBurst {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--spark-x), var(--spark-y)) scale(0.3);
+  }
+}
+
+/* Locked items styling */
+.shop-item.locked {
+  background: linear-gradient(180deg, #555 0%, #333 100%);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.shop-item.locked .item-name,
+.shop-item.locked .item-stats {
+  color: #888 !important;
+  text-shadow: none;
+}
+
+.ore-item.locked {
+  opacity: 0.5;
+  filter: grayscale(100%);
+}
+
+.ore-item.locked .ore-name,
+.ore-item.locked .ore-value {
+  color: #888;
+}
+
+/* Biome Chart Button */
+.biome-chart-btn {
+  padding: 8px 15px;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.biome-chart-btn:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Reset Button */
+.reset-btn {
+  padding: 8px 15px;
+  background: linear-gradient(180deg, #DC143C 0%, #8B0000 100%);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.reset-btn:hover {
+  background: linear-gradient(180deg, #FF1744 0%, #C62828 100%);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: scale(1.05);
+}
+
+/* Biome Chart Modal */
+.biome-chart-modal {
+  max-width: 700px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.biome-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.biome-item {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  gap: 15px;
+  align-items: center;
+  padding: 12px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.biome-item:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 215, 0, 0.5);
+  transform: translateX(5px);
+}
+
+.biome-item.locked {
+  opacity: 0.5;
+  filter: grayscale(100%);
+}
+
+.biome-color {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  border: 3px solid #000;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.biome-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.biome-name {
+  color: white;
+  font-weight: bold;
+  font-size: 20px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+.biome-depth {
+  color: #FFD700;
+  font-size: 16px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.biome-status {
+  color: #4CAF50;
+  font-weight: bold;
+  font-size: 16px;
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 8px 15px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.biome-item.locked .biome-name,
+.biome-item.locked .biome-depth {
+  color: #888;
+}
+
+.biome-item.locked .biome-status {
+  color: #888;
+}
