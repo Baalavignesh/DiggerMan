@@ -5,6 +5,9 @@ import { TOOLS, AUTO_DIGGERS, ORES, BIOMES, getBiome, getAutoDiggerCost } from '
 import type { Tool, AutoDigger } from './gameData';
 import Character from './Character';
 import Modal from './Modal';
+import AchievementsModal from './AchievementsModal';
+import AchievementToast from './AchievementToast';
+import { ACHIEVEMENTS, checkAchievement, Achievement } from './achievements';
 
 // Preload sounds and music for instant playback (no delay)
 let miningSound: HTMLAudioElement | null = null;
@@ -59,6 +62,8 @@ interface AppState extends GameState {
   discoveredTools: Set<string>;
   discoveredDiggers: Set<string>;
   discoveredBiomes: Set<number>;
+  totalClicks: number; // Track total ore clicks for achievements
+  unlockedAchievements: Set<string>; // Track unlocked achievement IDs
 }
 
 // Format large numbers for display
@@ -124,16 +129,23 @@ function App() {
     discoveredTools: new Set<string>(['dirt_pickaxe']), // Start with dirt pickaxe discovered
     discoveredDiggers: new Set<string>(),
     discoveredBiomes: new Set<number>([1]), // Start with Surface biome discovered
+    totalClicks: 0,
+    unlockedAchievements: new Set<string>(),
   });
 
-  const [showOreChart, setShowOreChart] = useState(false);
-  const [showBiomeChart, setShowBiomeChart] = useState(false);
   const [showShop, setShowShop] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const [showAchievements, setShowAchievements] = useState(false);
   const [shopTab, setShopTab] = useState<'tools' | 'diggers'>('tools');
+  const [infoTab, setInfoTab] = useState<'ores' | 'biomes'>('ores');
 
   // Audio control states
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+
+  // Achievement toast state
+  const [currentToastAchievement, setCurrentToastAchievement] = useState<Achievement | null>(null);
+  const [achievementQueue, setAchievementQueue] = useState<Achievement[]>([]);
 
   // Sound effect helpers
   const playMiningSound = useCallback(() => {
@@ -250,6 +262,59 @@ function App() {
     }
   }, [musicEnabled]);
 
+  // Check for newly unlocked achievements
+  useEffect(() => {
+    if (!ready) return;
+
+    const newlyUnlocked: string[] = [];
+
+    ACHIEVEMENTS.forEach(achievement => {
+      // Skip if already unlocked
+      if (gameState.unlockedAchievements.has(achievement.id)) return;
+
+      // Check if achievement is now unlocked
+      const isUnlocked = checkAchievement(achievement, {
+        depth: gameState.depth,
+        money: gameState.money,
+        totalClicks: gameState.totalClicks,
+        currentTool: gameState.currentTool,
+        oreInventory: gameState.oreInventory,
+        autoDiggers: gameState.autoDiggers,
+        discoveredOres: gameState.discoveredOres,
+        discoveredBiomes: gameState.discoveredBiomes,
+      });
+
+      if (isUnlocked) {
+        newlyUnlocked.push(achievement.id);
+      }
+    });
+
+    // Update unlocked achievements if any new ones
+    if (newlyUnlocked.length > 0) {
+      setGameState(prev => ({
+        ...prev,
+        unlockedAchievements: new Set([...prev.unlockedAchievements, ...newlyUnlocked]),
+      }));
+
+      // Add newly unlocked achievements to toast queue
+      const newAchievements = newlyUnlocked
+        .map(id => ACHIEVEMENTS.find(a => a.id === id))
+        .filter(Boolean) as Achievement[];
+
+      setAchievementQueue(prev => [...prev, ...newAchievements]);
+    }
+  }, [gameState.depth, gameState.money, gameState.totalClicks, gameState.currentTool,
+      gameState.oreInventory, gameState.autoDiggers, gameState.discoveredOres,
+      gameState.discoveredBiomes, ready]);
+
+  // Process achievement toast queue
+  useEffect(() => {
+    if (!currentToastAchievement && achievementQueue.length > 0) {
+      setCurrentToastAchievement(achievementQueue[0]);
+      setAchievementQueue(prev => prev.slice(1));
+    }
+  }, [currentToastAchievement, achievementQueue]);
+
   // Create falling ore effect (shared function) - DEFINED FIRST
   const createFallingOres = useCallback((oreId: string) => {
     const fallingCount = Math.floor(Math.random() * 2) + 1; // 1-2 falling ores per action
@@ -322,6 +387,7 @@ function App() {
           [currentOreId]: (prev.oreInventory[currentOreId] || 0) + 1,
         },
         discoveredOres: newDiscoveredOres,
+        totalClicks: prev.totalClicks + 1, // Track clicks for achievements
       };
     });
 
@@ -387,6 +453,7 @@ function App() {
               discoveredTools: Array.from(newState.discoveredTools),
               discoveredDiggers: Array.from(newState.discoveredDiggers),
               discoveredBiomes: Array.from(newState.discoveredBiomes),
+              unlockedAchievements: Array.from(newState.unlockedAchievements),
             }));
           }
           return newState;
@@ -626,6 +693,7 @@ function App() {
           discoveredTools: Array.from(gameState.discoveredTools),
           discoveredDiggers: Array.from(gameState.discoveredDiggers),
           discoveredBiomes: Array.from(gameState.discoveredBiomes),
+          unlockedAchievements: Array.from(gameState.unlockedAchievements),
         };
 
         if (isStandalone) {
@@ -663,6 +731,8 @@ function App() {
       discoveredTools: new Set<string>(['dirt_pickaxe']),
       discoveredDiggers: new Set<string>(),
       discoveredBiomes: new Set<number>([1]),
+      totalClicks: 0,
+      unlockedAchievements: new Set<string>(),
     };
 
     if (isStandalone) {
@@ -682,6 +752,8 @@ function App() {
             discoveredTools: new Set(parsed.discoveredTools || ['dirt_pickaxe']),
             discoveredDiggers: new Set(parsed.discoveredDiggers || []),
             discoveredBiomes: new Set(parsed.discoveredBiomes || [1]),
+            totalClicks: parsed.totalClicks || 0,
+            unlockedAchievements: new Set(parsed.unlockedAchievements || []),
           });
         } catch (e) {
           console.error('Failed to parse saved data:', e);
@@ -708,6 +780,8 @@ function App() {
               discoveredTools: new Set(message.data.savedState.discoveredTools || ['dirt_pickaxe']),
               discoveredDiggers: new Set(message.data.savedState.discoveredDiggers || []),
               discoveredBiomes: new Set(message.data.savedState.discoveredBiomes || [1]),
+              totalClicks: message.data.savedState.totalClicks || 0,
+              unlockedAchievements: new Set(message.data.savedState.unlockedAchievements || []),
             });
           }
           setReady(true);
@@ -775,11 +849,11 @@ function App() {
           <button className="pixel-btn shop-btn" onClick={() => { playSelectSound(); setShowShop(true); }}>
             <i className="fas fa-shopping-cart"></i> SHOP
           </button>
-          <button className="pixel-btn ore-chart-btn" onClick={() => { playSelectSound(); setShowOreChart(!showOreChart); }}>
-            <i className="fas fa-chart-bar"></i> ORES
+          <button className="pixel-btn info-btn" onClick={() => { playSelectSound(); setShowInfo(true); }}>
+            <i className="fas fa-info-circle"></i> INFO
           </button>
-          <button className="pixel-btn biome-chart-btn" onClick={() => { playSelectSound(); setShowBiomeChart(!showBiomeChart); }}>
-            <i className="fas fa-mountain"></i> BIOMES
+          <button className="pixel-btn achievements-btn" onClick={() => { playSelectSound(); setShowAchievements(true); }}>
+            <i className="fas fa-trophy"></i> ACHIEVEMENTS
           </button>
           <button
             className={`pixel-btn audio-btn ${musicEnabled ? 'enabled' : 'disabled'}`}
@@ -798,79 +872,143 @@ function App() {
           >
             <i className={`fas fa-${soundEnabled ? 'volume-up' : 'volume-off'}`}></i>
           </button>
-          <button className="pixel-btn reset-btn" onClick={() => { playSelectSound(); handleResetGame(); }} title="Reset game progress">
-            <i className="fas fa-redo"></i> RESET
+        </div>
+      </div>
+
+      {/* Big Money Display with Teasers */}
+      <div className="depth-display">
+        <div className="depth-info-row">
+          {/* Left: Next Biome Teaser */}
+          {(() => {
+            const nextBiome = BIOMES.find(b => b.minDepth > gameState.depth);
+            if (nextBiome) {
+              const feetRemaining = Math.ceil(nextBiome.minDepth - gameState.depth);
+              return (
+                <div className="next-biome-teaser">
+                  <div className="teaser-image">
+                    <div className="teaser-question">?</div>
+                  </div>
+                  <div className="teaser-info">
+                    <div className="teaser-distance">{formatNumber(feetRemaining)} ft remaining</div>
+                  </div>
+                </div>
+              );
+            }
+            return <div className="next-biome-teaser"></div>;
+          })()}
+
+          {/* Center: Money Display */}
+          <div className="depth-main">
+            <div className="depth-label">MONEY EARNED</div>
+            <div className="depth-value">
+              <span className="depth-number">${formatNumber(gameState.money)}</span>
+            </div>
+          </div>
+
+          {/* Right: Next Auto-Digger Teaser */}
+          {(() => {
+            const nextDigger = AUTO_DIGGERS.find((digger, index) => {
+              const shouldShow = index === 0 || gameState.discoveredDiggers.has(AUTO_DIGGERS[index - 1].id);
+              return shouldShow && !gameState.discoveredDiggers.has(digger.id);
+            });
+
+            if (nextDigger) {
+              return (
+                <div className="next-digger-teaser">
+                  <div className="teaser-image">
+                    <img
+                      src={`/auto-diggers/${nextDigger.name}.png`}
+                      alt="???"
+                      className="teaser-digger-img"
+                      style={{ filter: 'brightness(0)' }}
+                    />
+                    <div className="teaser-question">?</div>
+                  </div>
+                  <div className="teaser-label">NEXT AUTO-DIGGER</div>
+                </div>
+              );
+            }
+            return <div className="next-digger-teaser"></div>;
+          })()}
+        </div>
+      </div>
+
+      {/* Info Modal - Ores and Biomes */}
+      <Modal
+        isOpen={showInfo}
+        onClose={() => { playSelectSound(); setShowInfo(false); }}
+        title="INFO"
+        icon="fa-info-circle"
+        className="info-modal"
+      >
+        {/* Info Tabs */}
+        <div className="shop-tabs">
+          <button
+            className={`shop-tab ${infoTab === 'ores' ? 'active' : ''}`}
+            onClick={() => { playSelectSound(); setInfoTab('ores'); }}
+          >
+            <i className="fas fa-gem"></i>
+            <span>ORES</span>
+          </button>
+          <button
+            className={`shop-tab ${infoTab === 'biomes' ? 'active' : ''}`}
+            onClick={() => { playSelectSound(); setInfoTab('biomes'); }}
+          >
+            <i className="fas fa-mountain"></i>
+            <span>BIOMES</span>
           </button>
         </div>
-      </div>
 
-      {/* Big Money Display */}
-      <div className="depth-display">
-        <div className="depth-label">MONEY EARNED</div>
-        <div className="depth-value">
-          <span className="depth-number">${formatNumber(gameState.money)}</span>
-        </div>
-      </div>
+        <div className="modal-body">
+          {infoTab === 'ores' && (
+            <div className="ore-list">
+              {Object.values(ORES).map((ore) => {
+                const isDiscovered = gameState.discoveredOres.has(ore.id);
+                return (
+                  <div key={ore.id} className={`ore-item rarity-${ore.rarity} ${!isDiscovered ? 'locked' : ''}`}>
+                    <img
+                      src={isDiscovered ? getOreImagePath(ore.id, 1) : '/ores/Unknown.png'}
+                      alt={isDiscovered ? ore.name : '???'}
+                      className="ore-icon"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                    <span className="ore-name">{isDiscovered ? ore.name : '???'}</span>
+                    <span className="ore-value">{isDiscovered ? `$${formatNumber(ore.value)}` : '???'}</span>
+                    <span className="ore-count">
+                      ({gameState.oreInventory[ore.id] || 0} collected)
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-      <Modal
-        isOpen={showOreChart}
-        onClose={() => { playSelectSound(); setShowOreChart(false); }}
-        title="ORE VALUES"
-        icon="fas fa-gem"
-        className="ore-chart-modal"
-      >
-        <div className="ore-list">
-          {Object.values(ORES).map((ore) => {
-            const isDiscovered = gameState.discoveredOres.has(ore.id);
-            return (
-              <div key={ore.id} className={`ore-item rarity-${ore.rarity} ${!isDiscovered ? 'locked' : ''}`}>
-                <img
-                  src={isDiscovered ? getOreImagePath(ore.id, 1) : '/ores/Unknown.png'}
-                  alt={isDiscovered ? ore.name : '???'}
-                  className="ore-icon"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-                <span className="ore-name">{isDiscovered ? ore.name : '???'}</span>
-                <span className="ore-value">{isDiscovered ? `$${formatNumber(ore.value)}` : '???'}</span>
-                <span className="ore-count">
-                  ({gameState.oreInventory[ore.id] || 0} collected)
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={showBiomeChart}
-        onClose={() => { playSelectSound(); setShowBiomeChart(false); }}
-        title="BIOMES"
-        icon="fas fa-mountain"
-        className="biome-chart-modal"
-      >
-        <div className="biome-list">
-          {BIOMES.map((biome) => {
-            const isDiscovered = gameState.discoveredBiomes.has(biome.id);
-            return (
-              <div key={biome.id} className={`biome-item ${!isDiscovered ? 'locked' : ''}`}>
-                <div
-                  className="biome-color"
-                  style={{ backgroundColor: isDiscovered ? biome.backgroundColor : '#333' }}
-                />
-                <div className="biome-info">
-                  <span className="biome-name">{isDiscovered ? biome.name : '???'}</span>
-                  <span className="biome-depth">
-                    {isDiscovered ? `${formatNumber(biome.minDepth)}ft - ${biome.maxDepth === Infinity ? '∞' : formatNumber(biome.maxDepth) + 'ft'}` : '???'}
-                  </span>
-                </div>
-                <span className="biome-status">
-                  {isDiscovered ? (currentBiome.id === biome.id ? '📍 Current' : '✓ Discovered') : '🔒 Locked'}
-                </span>
-              </div>
-            );
-          })}
+          {infoTab === 'biomes' && (
+            <div className="biome-list">
+              {BIOMES.map((biome) => {
+                const isDiscovered = gameState.discoveredBiomes.has(biome.id);
+                return (
+                  <div key={biome.id} className={`biome-item ${!isDiscovered ? 'locked' : ''}`}>
+                    <div
+                      className="biome-color"
+                      style={{ backgroundColor: isDiscovered ? biome.backgroundColor : '#333' }}
+                    />
+                    <div className="biome-info">
+                      <span className="biome-name">{isDiscovered ? biome.name : '???'}</span>
+                      <span className="biome-depth">
+                        {isDiscovered ? `${formatNumber(biome.minDepth)}ft - ${biome.maxDepth === Infinity ? '∞' : formatNumber(biome.maxDepth) + 'ft'}` : '???'}
+                      </span>
+                    </div>
+                    <span className="biome-status">
+                      {isDiscovered ? (currentBiome.id === biome.id ? '📍 Current' : '✓ Discovered') : '🔒 Locked'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </Modal>
 
@@ -1085,6 +1223,29 @@ function App() {
               )}
         </div>
       </Modal>
+
+      {/* Achievements Modal */}
+      <AchievementsModal
+        isOpen={showAchievements}
+        onClose={() => { playSelectSound(); setShowAchievements(false); }}
+        gameState={{
+          depth: gameState.depth,
+          money: gameState.money,
+          totalClicks: gameState.totalClicks,
+          currentTool: gameState.currentTool,
+          oreInventory: gameState.oreInventory,
+          autoDiggers: gameState.autoDiggers,
+          discoveredOres: gameState.discoveredOres,
+          discoveredBiomes: gameState.discoveredBiomes,
+        }}
+        unlockedAchievements={gameState.unlockedAchievements}
+      />
+
+      {/* Achievement Toast Notification */}
+      <AchievementToast
+        achievement={currentToastAchievement}
+        onClose={() => setCurrentToastAchievement(null)}
+      />
       </div>
     </div>
   );
