@@ -10,12 +10,17 @@ const Character: React.FC<CharacterProps> = ({ isSmashing, onSmashComplete }) =>
 
   // Animation frames for smashing (row 2: FRONT FACING - red bandana character)
   const idleFrame = { x: 0, y: 2 }; // Front facing idle
+
+  // Slower animation for mobile, faster for desktop
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const frameDuration = isMobile ? 50 : 20; // 50ms for mobile, 20ms for desktop
+
   const smashFrames = [
-    { x: 5, y: 2, duration: 30 }, // Wind up
-    { x: 4, y: 2, duration: 30 }, // Swing back
-    { x: 3, y: 2, duration: 30 }, // Swing forward
-    { x: 1, y: 2, duration: 30 }, // Impact
-    { x: 0, y: 2, duration: 30 }, // Return to idle
+    { x: 5, y: 2, duration: frameDuration }, // Wind up
+    { x: 4, y: 2, duration: frameDuration }, // Swing back
+    { x: 3, y: 2, duration: frameDuration }, // Swing forward
+    { x: 1, y: 2, duration: frameDuration }, // Impact
+    { x: 0, y: 2, duration: frameDuration }, // Return to idle
   ];
 
   useEffect(() => {
@@ -45,7 +50,7 @@ const Character: React.FC<CharacterProps> = ({ isSmashing, onSmashComplete }) =>
     return () => {
       timeoutIds.forEach(id => clearTimeout(id));
     };
-  }, [isSmashing]); // Only depend on isSmashing, not onSmashComplete
+  }, [isSmashing, onSmashComplete]);
 
   const currentFrame = isSmashing ? smashFrames[frameIndex] || idleFrame : idleFrame;
 

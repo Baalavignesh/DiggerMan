@@ -13,18 +13,17 @@ const AchievementToast: React.FC<AchievementToastProps> = ({ achievement, onClos
     if (achievement) {
       setIsVisible(true);
 
-      // Auto-hide after 5 seconds
       const timer = setTimeout(() => {
         handleClose();
-      }, 5000);
+      }, 3000);
 
       return () => clearTimeout(timer);
     }
-  }, [achievement, onClose]);
+  }, [achievement]);
 
   const handleClose = () => {
     setIsVisible(false);
-    setTimeout(onClose, 400); // Wait for fade out animation
+    setTimeout(onClose, 200); // Wait for fade out animation
   };
 
   if (!achievement) return null;

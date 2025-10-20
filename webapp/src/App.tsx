@@ -9,45 +9,82 @@ import AchievementsModal from './AchievementsModal';
 import AchievementToast from './AchievementToast';
 import { ACHIEVEMENTS, checkAchievement, Achievement } from './achievements';
 
-// Preload sounds and music for instant playback (no delay)
-let miningSound: HTMLAudioElement | null = null;
-let selectSound: HTMLAudioElement | null = null;
+// Sound pooling for high-performance rapid taps
 let backgroundMusic: HTMLAudioElement | null = null;
+const SOUND_POOL_SIZE = 10;
+let miningSoundPool: HTMLAudioElement[] = [];
+let selectSoundPool: HTMLAudioElement[] = [];
+let currentMiningIndex = 0;
+let currentSelectIndex = 0;
+let lastMiningPlayTime = 0;
+const MINING_SOUND_THROTTLE = 50;
+const MAX_ACTIVE_SPARKS = 30;
+const MAX_FALLING_ORES = 40;
 
-// Initialize sounds after DOM is ready
+const isMobileDevice = () =>
+  typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+
 if (typeof window !== 'undefined') {
   try {
-    miningSound = new Audio('/sounds/mining.mp3');
-    miningSound.volume = 0.5;
-    miningSound.preload = 'auto';
-    miningSound.load(); // Force preload
+    for (let i = 0; i < SOUND_POOL_SIZE; i++) {
+      const sound = new Audio('/sounds/mining.mp3');
+      sound.volume = 0.01;
+      sound.preload = 'auto';
+      sound.load();
+      miningSoundPool.push(sound);
+    }
 
-    selectSound = new Audio('/sounds/clicksound.mp3');
-    selectSound.volume = 0.3;
-    selectSound.preload = 'auto';
-    selectSound.load(); // Force preload
+    for (let i = 0; i < SOUND_POOL_SIZE; i++) {
+      const sound = new Audio('/sounds/clicksound.mp3');
+      sound.volume = 0.06;
+      sound.preload = 'auto';
+      sound.load();
+      selectSoundPool.push(sound);
+    }
 
     backgroundMusic = new Audio('/sounds/music.mp3');
     backgroundMusic.volume = 0.2;
     backgroundMusic.loop = true;
     backgroundMusic.preload = 'auto';
-    backgroundMusic.load(); // Force preload
+    backgroundMusic.load();
   } catch (err) {
     console.error('Failed to initialize sounds:', err);
   }
 }
 
-// Sound effect utility - plays instantly
-const playSound = (audio: HTMLAudioElement | null) => {
-  if (!audio) return;
+const playMiningSound = () => {
+  if (isMobileDevice()) {
+    return;
+  }
+  const now = Date.now();
+  if (now - lastMiningPlayTime < MINING_SOUND_THROTTLE) {
+    return;
+  }
+  lastMiningPlayTime = now;
 
   try {
-    // Clone the audio for overlapping sounds
-    const soundClone = audio.cloneNode() as HTMLAudioElement;
-    soundClone.volume = audio.volume;
-    soundClone.play().catch(err => console.log('Sound play failed:', err));
+    const sound = miningSoundPool[currentMiningIndex];
+    if (sound.paused || sound.ended) {
+      sound.currentTime = 0;
+      sound.play().catch(() => {}); // Silently catch errors
+    }
+    currentMiningIndex = (currentMiningIndex + 1) % SOUND_POOL_SIZE;
   } catch (err) {
-    console.log('Sound playback failed:', err);
+  }
+};
+
+const playSelectSoundFast = () => {
+  if (isMobileDevice()) {
+    return;
+  }
+  try {
+    const sound = selectSoundPool[currentSelectIndex];
+    if (sound.paused || sound.ended) {
+      sound.currentTime = 0;
+      sound.play().catch(() => {});
+    }
+    currentSelectIndex = (currentSelectIndex + 1) % SOUND_POOL_SIZE;
+  } catch (err) {
   }
 };
 
@@ -74,6 +111,16 @@ function formatNumber(num: number): string {
   if (num < 1000000000000) return (num / 1000000000).toFixed(1) + 'B';
   if (num < 1000000000000000) return (num / 1000000000000).toFixed(1) + 'T';
   return (num / 1000000000000000).toFixed(1) + 'Q';
+}
+
+// Format money with 3 decimal places
+function formatMoney(num: number): string {
+  if (num < 1000) return num.toFixed(3);
+  if (num < 1000000) return (num / 1000).toFixed(3) + 'K';
+  if (num < 1000000000) return (num / 1000000).toFixed(3) + 'M';
+  if (num < 1000000000000) return (num / 1000000000).toFixed(3) + 'B';
+  if (num < 1000000000000000) return (num / 1000000000000).toFixed(3) + 'T';
+  return (num / 1000000000000000).toFixed(3) + 'Q';
 }
 
 // Format decimal numbers (for auto-digger speeds)
@@ -136,6 +183,7 @@ function App() {
   const [showShop, setShowShop] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [shopTab, setShopTab] = useState<'tools' | 'diggers'>('tools');
   const [infoTab, setInfoTab] = useState<'ores' | 'biomes'>('ores');
 
@@ -147,22 +195,22 @@ function App() {
   const [currentToastAchievement, setCurrentToastAchievement] = useState<Achievement | null>(null);
   const [achievementQueue, setAchievementQueue] = useState<Achievement[]>([]);
 
-  // Sound effect helpers
-  const playMiningSound = useCallback(() => {
+  // Sound effect helpers - optimized for rapid taps
+  const playMiningSoundCallback = useCallback(() => {
     if (soundEnabled) {
-      playSound(miningSound);
+      playMiningSound(); // Use pooled sound
     }
   }, [soundEnabled]);
 
   const playSelectSound = useCallback(() => {
     if (soundEnabled) {
-      playSound(selectSound);
+      playSelectSoundFast(); // Use pooled sound
     }
   }, [soundEnabled]);
+
   const [isSmashing, setIsSmashing] = useState(false);
   const [currentOreId, setCurrentOreId] = useState<string>('dirt');
   const [currentOreVariant, setCurrentOreVariant] = useState<number>(1);
-  const [upcomingOres, setUpcomingOres] = useState<Array<{ id: string; variant: number }>>([]);
   const [sparkParticles, setSparkParticles] = useState<Array<{ id: string; variant: number; x: number; y: number; key: number }>>([]);
   const [fallingOres, setFallingOres] = useState<Array<{ id: string; variant: number; x: number; delay: number; duration: number; key: number }>>([]);
 
@@ -180,11 +228,12 @@ function App() {
   const sparkKeyRef = useRef<number>(0);
   const fallingOreKeyRef = useRef<number>(0);
 
-  // Get current tool data
-  const currentTool = TOOLS.find((t) => t.id === gameState.currentTool) || TOOLS[0];
+  const currentTool = useMemo(
+    () => TOOLS.find((t) => t.id === gameState.currentTool) ?? TOOLS[0],
+    [gameState.currentTool]
+  );
 
-  // Get current biome
-  const currentBiome = getBiome(gameState.depth);
+  const currentBiome = useMemo(() => getBiome(gameState.depth), [gameState.depth]);
 
   // Reset game function
   const handleResetGame = useCallback(() => {
@@ -228,26 +277,17 @@ function App() {
 
   // Set initial ore when ready and start music
   useEffect(() => {
-    if (ready) {
-      const biome = getBiome(gameState.depth);
-      const initialOre = getRandomOre(biome.ores);
-      setCurrentOreId(initialOre);
-      setCurrentOreVariant(Math.floor(Math.random() * 3) + 1); // Random variant 1-3 (large)
+    if (!ready) return;
 
-      // Generate upcoming ores
-      const ores: Array<{ id: string; variant: number }> = [];
-      for (let i = 0; i < 5; i++) {
-        ores.push({
-          id: getRandomOre(biome.ores),
-          variant: Math.floor(Math.random() * 3) + 1,
-        });
-      }
-      setUpcomingOres(ores);
+    const biome = getBiome(gameState.depth);
+    const initialOre = getRandomOre(biome.ores);
+    setCurrentOreId(initialOre);
+    setCurrentOreVariant(Math.floor(Math.random() * 3) + 1);
 
-      // Start background music
-      if (backgroundMusic && musicEnabled) {
-        backgroundMusic.play().catch(err => console.log('Music autoplay blocked:', err));
-      }
+    if (backgroundMusic && musicEnabled) {
+      backgroundMusic.play().catch(() => {
+        /* Autoplay blocked */
+      });
     }
   }, [ready]);
 
@@ -255,7 +295,9 @@ function App() {
   useEffect(() => {
     if (backgroundMusic) {
       if (musicEnabled) {
-        backgroundMusic.play().catch(err => console.log('Music play failed:', err));
+        backgroundMusic.play().catch(() => {
+          /* Autoplay blocked */
+        });
       } else {
         backgroundMusic.pause();
       }
@@ -317,6 +359,9 @@ function App() {
 
   // Create falling ore effect (shared function) - DEFINED FIRST
   const createFallingOres = useCallback((oreId: string) => {
+    if (isMobileDevice()) {
+      return;
+    }
     const fallingCount = Math.floor(Math.random() * 2) + 1; // 1-2 falling ores per action
     const newFallingOres: Array<{ id: string; variant: number; x: number; delay: number; duration: number; key: number }> = [];
 
@@ -330,32 +375,37 @@ function App() {
       newFallingOres.push({ id: oreId, variant, x, delay, duration, key });
     }
 
-    setFallingOres((prev) => [...prev, ...newFallingOres]);
+    const removalKeys = new Set(newFallingOres.map((ore) => ore.key));
 
-    // Remove falling ores after animation completes
+    setFallingOres((prev) => {
+      const combined = [...prev, ...newFallingOres];
+      if (combined.length > MAX_FALLING_ORES) {
+        return combined.slice(combined.length - MAX_FALLING_ORES);
+      }
+      return combined;
+    });
+
     setTimeout(() => {
-      setFallingOres((current) => current.filter((ore) => !newFallingOres.find((n) => n.key === ore.key)));
-    }, 11000); // 11 seconds to account for max duration (9s) + delay (1.5s) + buffer
+      setFallingOres((current) => current.filter((ore) => !removalKeys.has(ore.key)));
+    }, 11000);
   }, []);
 
   // Handle ore click - triggers smash animation
   const handleOreClick = useCallback(() => {
-    if (isSmashing) return; // Prevent clicking while animating
-
     const ore = ORES[currentOreId];
     const bonusMoney = Math.floor(ore.value * currentTool.bonusMultiplier);
 
-    playMiningSound(); // Play mining sound instantly
+    playMiningSoundCallback();
     setIsSmashing(true);
 
-    // Create spark particles
-    const sparkCount = Math.floor(Math.random() * 3) + 3; // 3-5 sparks
+    const mobile = isMobileDevice();
+    const sparkCount = mobile ? 1 : Math.floor(Math.random() * 3) + 3;
     const newSparks: Array<{ id: string; variant: number; x: number; y: number; key: number }> = [];
 
     for (let i = 0; i < sparkCount; i++) {
-      const variant = Math.floor(Math.random() * 3) + 4; // Variants 4, 5, or 6
-      const angle = (Math.PI * 2 * i) / sparkCount; // Spread evenly in circle
-      const distance = 60 + Math.random() * 40; // Random distance 60-100px
+      const variant = Math.floor(Math.random() * 3) + 4;
+      const angle = (Math.PI * 2 * i) / sparkCount;
+      const distance = 60 + Math.random() * 40;
       const x = Math.cos(angle) * distance;
       const y = Math.sin(angle) * distance;
       const key = sparkKeyRef.current++;
@@ -363,15 +413,23 @@ function App() {
       newSparks.push({ id: currentOreId, variant, x, y, key });
     }
 
-    setSparkParticles((prev) => [...prev, ...newSparks]);
+    const sparkRemovalKeys = new Set(newSparks.map((spark) => spark.key));
 
-    // Remove sparks after animation completes (0.6 seconds)
+    setSparkParticles((prev) => {
+      const combined = [...prev, ...newSparks];
+      if (combined.length > MAX_ACTIVE_SPARKS) {
+        return combined.slice(combined.length - MAX_ACTIVE_SPARKS);
+      }
+      return combined;
+    });
+
     setTimeout(() => {
-      setSparkParticles((prev) => prev.filter((spark) => !newSparks.find((n) => n.key === spark.key)));
+      setSparkParticles((prev) => prev.filter((spark) => !sparkRemovalKeys.has(spark.key)));
     }, 600);
 
-    // Trigger falling ore effect
-    createFallingOres(currentOreId);
+    if (!mobile) {
+      createFallingOres(currentOreId);
+    }
 
     // Collect the ore immediately and mark as discovered
     setGameState((prev) => {
@@ -380,44 +438,28 @@ function App() {
 
       return {
         ...prev,
-        depth: prev.depth + 1, // Each click = 1ft depth
+        depth: prev.depth + 1,
         money: prev.money + bonusMoney,
         oreInventory: {
           ...prev.oreInventory,
           [currentOreId]: (prev.oreInventory[currentOreId] || 0) + 1,
         },
         discoveredOres: newDiscoveredOres,
-        totalClicks: prev.totalClicks + 1, // Track clicks for achievements
+        totalClicks: prev.totalClicks + 1,
       };
     });
 
-    // Move to next ore from the upcoming queue immediately
-    setUpcomingOres((prev) => {
-      const [nextOre, ...remaining] = prev;
-      if (nextOre) {
-        setCurrentOreId(nextOre.id);
-        setCurrentOreVariant(nextOre.variant);
-      }
+    const biome = currentBiome;
+    const nextOreId = getRandomOre(biome.ores);
+    const nextOreVariant = Math.floor(Math.random() * 3) + 1;
 
-      // Generate a new ore to add to the end of the queue
-      const biome = getBiome(gameState.depth);
-      const newOre = {
-        id: getRandomOre(biome.ores),
-        variant: Math.floor(Math.random() * 3) + 1,
-      };
+    setCurrentOreId(nextOreId);
+    setCurrentOreVariant(nextOreVariant);
+  }, [currentOreId, currentTool, currentBiome, createFallingOres, playMiningSoundCallback]);
 
-      return [...remaining, newOre];
-    });
-
-    // Allow next click after a very short delay (50ms) for instant feel
-    setTimeout(() => {
-      setIsSmashing(false);
-    }, 50);
-  }, [isSmashing, currentOreId, currentTool, gameState.depth, createFallingOres, playMiningSound]);
-
-  // Handle smash animation complete - now just a placeholder for the Character component
+  // Handle smash animation complete
   const handleSmashComplete = useCallback(() => {
-    // Animation complete - nothing to do here since ore collection happens in handleOreClick
+    setIsSmashing(false);
   }, []);
 
   // Buy tool upgrade
@@ -846,31 +888,8 @@ function App() {
             <span className="stat-label"><i className="fas fa-mountain"></i> Biome:</span>
             <span className="stat-value">{currentBiome.name}</span>
           </div>
-          <button className="pixel-btn shop-btn" onClick={() => { playSelectSound(); setShowShop(true); }}>
-            <i className="fas fa-shopping-cart"></i> SHOP
-          </button>
-          <button className="pixel-btn info-btn" onClick={() => { playSelectSound(); setShowInfo(true); }}>
-            <i className="fas fa-info-circle"></i> INFO
-          </button>
-          <button className="pixel-btn achievements-btn" onClick={() => { playSelectSound(); setShowAchievements(true); }}>
-            <i className="fas fa-trophy"></i> ACHIEVEMENTS
-          </button>
-          <button
-            className={`pixel-btn audio-btn ${musicEnabled ? 'enabled' : 'disabled'}`}
-            onClick={() => { playSelectSound(); setMusicEnabled(!musicEnabled); }}
-            title={musicEnabled ? 'Disable Music' : 'Enable Music'}
-          >
-            <i className={`fas fa-${musicEnabled ? 'music' : 'volume-mute'}`}></i>
-          </button>
-          <button
-            className={`pixel-btn audio-btn ${soundEnabled ? 'enabled' : 'disabled'}`}
-            onClick={() => {
-              if (soundEnabled) playSound(selectSound); // Play sound before disabling
-              setSoundEnabled(!soundEnabled);
-            }}
-            title={soundEnabled ? 'Disable Sounds' : 'Enable Sounds'}
-          >
-            <i className={`fas fa-${soundEnabled ? 'volume-up' : 'volume-off'}`}></i>
+          <button className="pixel-btn menu-btn" onClick={() => { playSelectSound(); setShowMenu(true); }}>
+            <i className="fas fa-bars"></i> MENU
           </button>
         </div>
       </div>
@@ -901,7 +920,7 @@ function App() {
           <div className="depth-main">
             <div className="depth-label">MONEY EARNED</div>
             <div className="depth-value">
-              <span className="depth-number">${formatNumber(gameState.money)}</span>
+              <span className="depth-number">${formatMoney(gameState.money)}</span>
             </div>
           </div>
 
@@ -932,6 +951,42 @@ function App() {
           })()}
         </div>
       </div>
+
+      {/* Menu Modal */}
+      <Modal
+        isOpen={showMenu}
+        onClose={() => { playSelectSound(); setShowMenu(false); }}
+        title="MENU"
+        icon="fa-bars"
+        className="menu-modal"
+      >
+        <div className="menu-buttons">
+          <button className="pixel-btn shop-btn menu-item" onClick={() => { playSelectSound(); setShowMenu(false); setShowShop(true); }}>
+            <i className="fas fa-shopping-cart"></i> SHOP
+          </button>
+          <button className="pixel-btn info-btn menu-item" onClick={() => { playSelectSound(); setShowMenu(false); setShowInfo(true); }}>
+            <i className="fas fa-info-circle"></i> INFO
+          </button>
+          <button className="pixel-btn achievements-btn menu-item" onClick={() => { playSelectSound(); setShowMenu(false); setShowAchievements(true); }}>
+            <i className="fas fa-trophy"></i> ACHIEVEMENTS
+          </button>
+          <button
+            className={`pixel-btn audio-btn menu-item ${musicEnabled ? 'enabled' : 'disabled'}`}
+            onClick={() => { playSelectSound(); setMusicEnabled(!musicEnabled); }}
+          >
+            <i className={`fas fa-${musicEnabled ? 'music' : 'volume-mute'}`}></i> MUSIC: {musicEnabled ? 'ON' : 'OFF'}
+          </button>
+          <button
+            className={`pixel-btn audio-btn menu-item ${soundEnabled ? 'enabled' : 'disabled'}`}
+            onClick={() => {
+              if (soundEnabled) playSelectSoundFast();
+              setSoundEnabled(!soundEnabled);
+            }}
+          >
+            <i className={`fas fa-${soundEnabled ? 'volume-up' : 'volume-off'}`}></i> SOUND: {soundEnabled ? 'ON' : 'OFF'}
+          </button>
+        </div>
+      </Modal>
 
       {/* Info Modal - Ores and Biomes */}
       <Modal
@@ -1012,7 +1067,7 @@ function App() {
         </div>
       </Modal>
 
-      <div className="game-content">
+      <div className="game-content" onClick={handleOreClick} style={{ cursor: 'pointer' }}>
         {/* Static background ore decorations */}
         <div className="background-ores">
           {backgroundOres.map((bgOre) => (
@@ -1042,13 +1097,12 @@ function App() {
                 <Character isSmashing={isSmashing} onSmashComplete={handleSmashComplete} />
               </div>
 
-              <div className="ore-container" onClick={handleOreClick}>
+              <div className="ore-container">
                 <div className="ore-wrapper">
                   <img
                     src={getOreImagePath(currentOreId, currentOreVariant)}
                     alt={ORES[currentOreId]?.name || 'Ore'}
                     className="current-ore"
-                    style={{ cursor: isSmashing ? 'default' : 'pointer' }}
                     onError={(e) => {
                       console.error(`Failed to load ore: ${getOreImagePath(currentOreId, currentOreVariant)}`);
                     }}
@@ -1071,22 +1125,6 @@ function App() {
                   ))}
                 </div>
                 <div className="ore-label">{ORES[currentOreId]?.name || 'Unknown'}</div>
-              </div>
-
-              {/* Upcoming ores stack */}
-              <div className="upcoming-ores">
-                {upcomingOres.map((ore, index) => (
-                  <img
-                    key={index}
-                    src={getOreImagePath(ore.id, ore.variant)}
-                    alt={ORES[ore.id]?.name || 'Ore'}
-                    className="upcoming-ore"
-                    style={{ zIndex: 5 - index }}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                ))}
               </div>
             </div>
           </div>
