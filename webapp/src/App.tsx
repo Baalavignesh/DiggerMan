@@ -6,14 +6,38 @@ import type { Tool, AutoDigger } from './gameData';
 import Character from './Character';
 import Modal from './Modal';
 
-// Sound effect utility
-const playSound = (soundPath: string, volume: number = 0.5) => {
+// Preload sounds for instant playback (no delay)
+let miningSound: HTMLAudioElement | null = null;
+let selectSound: HTMLAudioElement | null = null;
+
+// Initialize sounds after DOM is ready
+if (typeof window !== 'undefined') {
   try {
-    const audio = new Audio(soundPath);
-    audio.volume = volume;
-    audio.play().catch(err => console.log('Sound play failed:', err));
+    miningSound = new Audio('/sounds/mining.mp3');
+    miningSound.volume = 0.5;
+    miningSound.preload = 'auto';
+    miningSound.load(); // Force preload
+
+    selectSound = new Audio('/sounds/clicksound.mp3');
+    selectSound.volume = 0.3;
+    selectSound.preload = 'auto';
+    selectSound.load(); // Force preload
   } catch (err) {
-    console.log('Sound initialization failed:', err);
+    console.error('Failed to initialize sounds:', err);
+  }
+}
+
+// Sound effect utility - plays instantly
+const playSound = (audio: HTMLAudioElement | null) => {
+  if (!audio) return;
+
+  try {
+    // Clone the audio for overlapping sounds
+    const soundClone = audio.cloneNode() as HTMLAudioElement;
+    soundClone.volume = audio.volume;
+    soundClone.play().catch(err => console.log('Sound play failed:', err));
+  } catch (err) {
+    console.log('Sound playback failed:', err);
   }
 };
 
@@ -100,9 +124,13 @@ function App() {
   const [showShop, setShowShop] = useState(false);
   const [shopTab, setShopTab] = useState<'tools' | 'diggers'>('tools');
 
-  // Sound effect helper
+  // Sound effect helpers
+  const playMiningSound = useCallback(() => {
+    playSound(miningSound);
+  }, []);
+
   const playSelectSound = useCallback(() => {
-    playSound('/sounds/select_001.ogg', 0.3);
+    playSound(selectSound);
   }, []);
   const [isSmashing, setIsSmashing] = useState(false);
   const [currentOreId, setCurrentOreId] = useState<string>('dirt');
@@ -150,10 +178,10 @@ function App() {
     }
   }, []);
 
-  // Generate static background ores (memoized to prevent re-rendering)
+  // Generate static background ores (memoized - only runs once)
   const backgroundOres = useMemo(() => {
     const oreTypes = ['stone', 'gold', 'emerald', 'ruby', 'diamond', 'deep_stone'];
-    return Array.from({ length: 25 }).map((_, i) => ({
+    return Array.from({ length: 25 }, (_, i) => ({
       id: i,
       ore: oreTypes[Math.floor(Math.random() * oreTypes.length)],
       variant: Math.floor(Math.random() * 3) + 4, // Variants 4-6 for background
@@ -161,18 +189,14 @@ function App() {
       y: Math.random() * 100,
       size: 30 + Math.random() * 20, // 30-50px
     }));
-  }, []); // Empty dependency array means this only runs once
+  }, []);
 
   // Calculate total auto-digger production
-  const calculateAutoProduction = useCallback(() => {
-    let totalDepth = 0;
-
-    AUTO_DIGGERS.forEach((digger) => {
+  const totalDepthProduction = useMemo(() => {
+    return AUTO_DIGGERS.reduce((total, digger) => {
       const count = gameState.autoDiggers[digger.id] || 0;
-      totalDepth += digger.depthPerSecond * count;
-    });
-
-    return { totalDepth };
+      return total + digger.depthPerSecond * count;
+    }, 0);
   }, [gameState.autoDiggers]);
 
   // Set initial ore when ready
@@ -195,10 +219,34 @@ function App() {
     }
   }, [ready]);
 
+  // Create falling ore effect (shared function) - DEFINED FIRST
+  const createFallingOres = useCallback((oreId: string) => {
+    const fallingCount = Math.floor(Math.random() * 2) + 1; // 1-2 falling ores per action
+    const newFallingOres: Array<{ id: string; variant: number; x: number; delay: number; duration: number; key: number }> = [];
+
+    for (let i = 0; i < fallingCount; i++) {
+      const variant = Math.floor(Math.random() * 6) + 1; // Variants 1-6 (all variants)
+      const x = Math.random() * 100; // Random x position (0-100%)
+      const delay = Math.random() * 1.5; // Random delay 0-1.5s
+      const duration = 6 + Math.random() * 3; // Duration 6-9s (much slower)
+      const key = fallingOreKeyRef.current++;
+
+      newFallingOres.push({ id: oreId, variant, x, delay, duration, key });
+    }
+
+    setFallingOres((prev) => [...prev, ...newFallingOres]);
+
+    // Remove falling ores after animation completes
+    setTimeout(() => {
+      setFallingOres((current) => current.filter((ore) => !newFallingOres.find((n) => n.key === ore.key)));
+    }, 11000); // 11 seconds to account for max duration (9s) + delay (1.5s) + buffer
+  }, []);
+
   // Handle ore click - triggers smash animation
   const handleOreClick = useCallback(() => {
     if (isSmashing) return; // Prevent clicking while animating
 
+    playMiningSound(); // Play mining sound instantly
     setIsSmashing(true);
 
     // Create spark particles
@@ -225,36 +273,7 @@ function App() {
 
     // Trigger falling ore effect
     createFallingOres(currentOreId);
-  }, [isSmashing, currentOreId, createFallingOres]);
-
-  // Create falling ore effect (shared function)
-  const createFallingOres = useCallback((oreId: string) => {
-    console.log('[DEBUG] createFallingOres called with oreId:', oreId);
-    console.log('[DEBUG] Sample image path:', getOreImagePath(oreId, 1));
-
-    const fallingCount = Math.floor(Math.random() * 2) + 1; // 1-2 falling ores per action
-    const newFallingOres: Array<{ id: string; variant: number; x: number; delay: number; duration: number; key: number }> = [];
-
-    for (let i = 0; i < fallingCount; i++) {
-      const variant = Math.floor(Math.random() * 6) + 1; // Variants 1-6 (all variants)
-      const x = Math.random() * 100; // Random x position (0-100%)
-      const delay = Math.random() * 1.5; // Random delay 0-1.5s
-      const duration = 6 + Math.random() * 3; // Duration 6-9s (much slower)
-      const key = fallingOreKeyRef.current++;
-
-      // Use the ACTUAL ore being mined, not the biome ore
-      newFallingOres.push({ id: oreId, variant, x, delay, duration, key });
-    }
-
-    console.log('[DEBUG] Created falling ores:', newFallingOres.map(o => `${o.id}:${o.variant}`).join(', '));
-
-    setFallingOres((prev) => [...prev, ...newFallingOres]);
-
-    // Remove falling ores after animation completes
-    setTimeout(() => {
-      setFallingOres((current) => current.filter((ore) => !newFallingOres.find((n) => n.key === ore.key)));
-    }, 11000); // 11 seconds to account for max duration (9s) + delay (1.5s) + buffer
-  }, []);
+  }, [isSmashing, currentOreId, createFallingOres, playMiningSound]);
 
   // Handle smash animation complete - collect ore and spawn new one
   const handleSmashComplete = useCallback(() => {
@@ -322,7 +341,6 @@ function App() {
             currentTool: tool.id,
             discoveredTools: newDiscoveredTools,
           };
-          console.log('Bought tool, new currentTool:', tool.id);
           // Immediately save to localStorage
           if (window.self === window.top) {
             localStorage.setItem('theDiggerSave', JSON.stringify({
@@ -371,23 +389,21 @@ function App() {
 
   // Auto-production tick (60fps) - just updates depth
   useEffect(() => {
+    if (totalDepthProduction <= 0) return;
+
     const interval = setInterval(() => {
       const now = Date.now();
       const deltaTime = (now - lastTickRef.current) / 1000; // Convert to seconds
       lastTickRef.current = now;
 
-      const { totalDepth } = calculateAutoProduction();
-
-      if (totalDepth > 0) {
-        setGameState((prev) => ({
-          ...prev,
-          depth: prev.depth + totalDepth * deltaTime,
-        }));
-      }
+      setGameState((prev) => ({
+        ...prev,
+        depth: prev.depth + totalDepthProduction * deltaTime,
+      }));
     }, 1000 / 60); // 60 FPS
 
     return () => clearInterval(interval);
-  }, [calculateAutoProduction]);
+  }, [totalDepthProduction]);
 
   // Initialize auto-digger states when purchased
   useEffect(() => {
@@ -446,8 +462,6 @@ function App() {
 
     // If biome changed, update all auto-digger ores
     if (prevBiomeRef.current !== 0 && prevBiomeRef.current !== currentBiomeId) {
-      console.log(`Biome changed from ${prevBiomeRef.current} to ${currentBiomeId}, updating auto-digger ores`);
-
       const newBiome = getBiome(gameState.depth);
 
       setAutoDiggerStates((prev) => {
@@ -482,8 +496,6 @@ function App() {
       (diggerId) => gameState.autoDiggers[diggerId] > 0
     );
 
-    console.log('Auto-mining effect running. Owned diggers:', ownedDiggers);
-
     ownedDiggers.forEach((diggerId) => {
       const digger = AUTO_DIGGERS.find((d) => d.id === diggerId);
       const count = gameState.autoDiggers[diggerId] || 0;
@@ -495,10 +507,7 @@ function App() {
       // Speed increases with count (more copies = faster mining)
       const mineInterval = Math.max(100, baseInterval / count);
 
-      console.log(`Starting interval for ${diggerId} at ${mineInterval}ms`);
-
       const interval = setInterval(() => {
-        console.log(`Interval tick for ${diggerId}`);
 
         // Start smashing animation
         setAutoDiggerStates((prev) => {
@@ -563,7 +572,6 @@ function App() {
     });
 
     return () => {
-      console.log('Cleaning up intervals:', Object.keys(intervals).length);
       Object.values(intervals).forEach((interval) => clearInterval(interval));
     };
   }, [gameState.autoDiggers, createFallingOres]);
@@ -586,7 +594,6 @@ function App() {
 
         if (isStandalone) {
           localStorage.setItem('theDiggerSave', JSON.stringify(saveData));
-          console.log('Saved game state to localStorage:', saveData);
         } else {
           postToDevvit({
             type: 'saveGame',
@@ -640,7 +647,6 @@ function App() {
             discoveredDiggers: new Set(parsed.discoveredDiggers || []),
             discoveredBiomes: new Set(parsed.discoveredBiomes || [1]),
           });
-          console.log('Loaded game state from localStorage:', parsed);
         } catch (e) {
           console.error('Failed to parse saved data:', e);
         }
@@ -695,8 +701,6 @@ function App() {
       </div>
     );
   }
-
-  const { totalDepth } = calculateAutoProduction();
 
   return (
     <div className="app">
@@ -934,35 +938,40 @@ function App() {
                     const isOlderTool = index < currentToolIndex;
                     const isCurrentTool = gameState.currentTool === tool.id;
                     const canAfford = gameState.money >= tool.cost;
-                    const isDiscovered = gameState.discoveredTools.has(tool.id);
                     // Show next tool if current or previous tool is discovered
                     const shouldShow = index === 0 || gameState.discoveredTools.has(TOOLS[index - 1].id);
 
                     return (
                       <button
                         key={tool.id}
-                        className={`shop-item pixel-btn ${isCurrentTool ? 'owned' : ''} ${
-                          canAfford && !isOlderTool && !isCurrentTool ? 'affordable' : 'expensive'
+                        className={`shop-item cookie-clicker-style ${isCurrentTool ? 'owned' : ''} ${
+                          canAfford && !isOlderTool && !isCurrentTool && shouldShow ? 'affordable' : 'expensive'
                         } ${isOlderTool ? 'obsolete' : ''} ${!shouldShow ? 'locked' : ''}`}
-                        onClick={() => buyTool(tool)}
-                        disabled={isCurrentTool || isOlderTool || !canAfford}
+                        onClick={() => shouldShow && buyTool(tool)}
+                        disabled={isCurrentTool || isOlderTool || !canAfford || !shouldShow}
                       >
-                        <div className="item-header">
+                        <div className="item-icon-container">
                           <img
                             src={shouldShow ? getOreImagePath(tool.oreId, 1) : '/ores/Unknown.png'}
                             alt={shouldShow ? (ORES[tool.oreId]?.name || 'Ore') : '???'}
-                            className="tool-ore-icon"
+                            className={`item-icon ${!shouldShow ? 'locked-icon' : ''}`}
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
                             }}
                           />
-                          <div className="item-info">
-                            <div className="item-name">{shouldShow ? tool.name : '???'}</div>
-                            <div className="item-stats">{shouldShow ? `${tool.bonusMultiplier}x Money Bonus` : '???'}</div>
-                          </div>
+                          {!shouldShow && <div className="locked-overlay">?</div>}
                         </div>
-                        <div className="item-cost-btn">
-                          {!shouldShow ? '🔒 LOCKED' : isCurrentTool ? '✓ EQUIPPED' : isOlderTool ? '✗ OBSOLETE' : `$${formatNumber(tool.cost)}`}
+                        <div className="item-details">
+                          <div className="item-name-bold">
+                            {shouldShow ? tool.name : '???'}
+                          </div>
+                          {isCurrentTool && <div className="item-count">EQUIPPED</div>}
+                          <div className="item-stats-small">
+                            {shouldShow ? `${tool.bonusMultiplier}x Money Bonus` : '???'}
+                          </div>
+                          <div className="item-price">
+                            {!shouldShow ? '???' : isCurrentTool ? '✓ OWNED' : isOlderTool ? 'OBSOLETE' : `$${formatNumber(tool.cost)}`}
+                          </div>
                         </div>
                       </button>
                     );
@@ -978,27 +987,41 @@ function App() {
                     const count = gameState.autoDiggers[digger.id] || 0;
                     const cost = getAutoDiggerCost(digger, count);
                     const canAfford = gameState.money >= cost;
-                    const isDiscovered = gameState.discoveredDiggers.has(digger.id);
                     // Show next digger if current or previous digger is discovered
                     const shouldShow = index === 0 || gameState.discoveredDiggers.has(AUTO_DIGGERS[index - 1].id);
+                    const diggerImagePath = `/auto-diggers/${digger.name}.png`;
 
                     return (
                       <button
                         key={digger.id}
-                        className={`shop-item pixel-btn ${canAfford ? 'affordable' : 'expensive'} ${!shouldShow ? 'locked' : ''}`}
-                        onClick={() => buyAutoDigger(digger)}
+                        className={`shop-item cookie-clicker-style ${canAfford && shouldShow ? 'affordable' : 'expensive'} ${!shouldShow ? 'locked' : ''} ${count > 0 ? 'owned' : ''}`}
+                        onClick={() => shouldShow && buyAutoDigger(digger)}
                         disabled={!canAfford || !shouldShow}
                       >
-                        <div className="item-info">
-                          <div className="item-name">
-                            {shouldShow ? `${digger.name} ${count > 0 ? `(${count})` : ''}` : '???'}
+                        <div className="item-icon-container">
+                          <img
+                            src={diggerImagePath}
+                            alt={shouldShow ? digger.name : '???'}
+                            className={`item-icon ${!shouldShow ? 'locked-icon' : ''}`}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                          {!shouldShow && <div className="locked-overlay">?</div>}
+                        </div>
+                        <div className="item-details">
+                          <div className="item-name-bold">
+                            {shouldShow ? digger.name : '???'}
                           </div>
-                          <div className="item-stats">
+                          <div className="item-count">
+                            {count > 0 && shouldShow && `x${count}`}
+                          </div>
+                          <div className="item-stats-small">
                             {shouldShow ? `+${formatDecimal(digger.depthPerSecond)}ft/s` : '???'}
                           </div>
-                        </div>
-                        <div className="item-cost-btn">
-                          {!shouldShow ? '🔒 LOCKED' : `$${formatNumber(cost)}`}
+                          <div className="item-price">
+                            {shouldShow ? `$${formatNumber(cost)}` : '???'}
+                          </div>
                         </div>
                       </button>
                     );

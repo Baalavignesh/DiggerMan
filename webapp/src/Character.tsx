@@ -19,25 +19,33 @@ const Character: React.FC<CharacterProps> = ({ isSmashing, onSmashComplete }) =>
   ];
 
   useEffect(() => {
-    if (isSmashing) {
-      setFrameIndex(0);
+    if (!isSmashing) return;
 
-      const animateFrame = (index: number) => {
-        if (index >= smashFrames.length) {
-          onSmashComplete();
-          return;
-        }
+    setFrameIndex(0);
+    let timeoutIds: NodeJS.Timeout[] = [];
 
-        setFrameIndex(index);
+    const animateFrame = (index: number) => {
+      if (index >= smashFrames.length) {
+        onSmashComplete();
+        return;
+      }
 
-        setTimeout(() => {
-          animateFrame(index + 1);
-        }, smashFrames[index].duration);
-      };
+      setFrameIndex(index);
 
-      animateFrame(0);
-    }
-  }, [isSmashing]);
+      const timeoutId = setTimeout(() => {
+        animateFrame(index + 1);
+      }, smashFrames[index].duration);
+
+      timeoutIds.push(timeoutId);
+    };
+
+    animateFrame(0);
+
+    // Cleanup: cancel all pending timeouts if component unmounts or effect re-runs
+    return () => {
+      timeoutIds.forEach(id => clearTimeout(id));
+    };
+  }, [isSmashing]); // Only depend on isSmashing, not onSmashComplete
 
   const currentFrame = isSmashing ? smashFrames[frameIndex] || idleFrame : idleFrame;
 

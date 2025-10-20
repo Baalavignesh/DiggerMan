@@ -1029,3 +1029,137 @@ i, .fa, .fas, .far, .fab {
 .biome-item.locked .biome-status {
   color: #888;
 }
+
+/* Cookie Clicker Style Shop Items */
+.cookie-clicker-style {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 15px;
+  padding: 10px 15px;
+  background: linear-gradient(180deg, rgba(50, 50, 50, 0.9) 0%, rgba(30, 30, 30, 0.9) 100%);
+  border: 3px solid #000;
+  min-height: 80px;
+  position: relative;
+}
+
+.cookie-clicker-style.affordable {
+  background: linear-gradient(180deg, rgba(60, 80, 60, 0.9) 0%, rgba(40, 60, 40, 0.9) 100%);
+}
+
+.cookie-clicker-style.locked {
+  background: linear-gradient(180deg, rgba(20, 20, 20, 0.95) 0%, rgba(10, 10, 10, 0.95) 100%);
+}
+
+.item-icon-container {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.item-icon {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  image-rendering: auto;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.item-icon.locked-icon {
+  filter: brightness(0) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
+
+.locked-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 48px;
+  font-weight: bold;
+  color: #666;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+.item-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+
+.item-name-bold {
+  font-size: 24px;
+  font-weight: 900;
+  color: #FFF;
+  text-shadow:
+    2px 2px 0px #000,
+    -1px -1px 0px #000,
+    1px -1px 0px #000,
+    -1px 1px 0px #000;
+  line-height: 1.2;
+  letter-spacing: 0.5px;
+}
+
+.cookie-clicker-style.locked .item-name-bold {
+  color: #444;
+}
+
+.item-count {
+  font-size: 16px;
+  font-weight: bold;
+  color: #FFD700;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.item-stats-small {
+  font-size: 14px;
+  color: #AAA;
+  font-weight: normal;
+}
+
+.cookie-clicker-style.locked .item-stats-small {
+  color: #333;
+}
+
+.item-price {
+  font-size: 18px;
+  font-weight: bold;
+  color: #90EE90;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.cookie-clicker-style.expensive .item-price {
+  color: #FF6B6B;
+}
+
+.cookie-clicker-style.locked .item-price {
+  color: #333;
+}
+
+.cookie-clicker-style.owned {
+  background: linear-gradient(180deg, rgba(80, 60, 20, 0.9) 0%, rgba(60, 40, 10, 0.9) 100%);
+  border-color: #FFD700;
+}
+
+.cookie-clicker-style.obsolete {
+  opacity: 0.4;
+  background: linear-gradient(180deg, rgba(40, 40, 40, 0.7) 0%, rgba(20, 20, 20, 0.7) 100%);
+}
+
+.cookie-clicker-style.owned .item-count {
+  color: #FFD700;
+  font-size: 14px;
+}
+
+.cookie-clicker-style.owned .item-price {
+  color: #FFD700;
+}
