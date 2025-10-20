@@ -6,9 +6,10 @@ import type { Tool, AutoDigger } from './gameData';
 import Character from './Character';
 import Modal from './Modal';
 
-// Preload sounds for instant playback (no delay)
+// Preload sounds and music for instant playback (no delay)
 let miningSound: HTMLAudioElement | null = null;
 let selectSound: HTMLAudioElement | null = null;
+let backgroundMusic: HTMLAudioElement | null = null;
 
 // Initialize sounds after DOM is ready
 if (typeof window !== 'undefined') {
@@ -22,6 +23,12 @@ if (typeof window !== 'undefined') {
     selectSound.volume = 0.3;
     selectSound.preload = 'auto';
     selectSound.load(); // Force preload
+
+    backgroundMusic = new Audio('/sounds/music.mp3');
+    backgroundMusic.volume = 0.2;
+    backgroundMusic.loop = true;
+    backgroundMusic.preload = 'auto';
+    backgroundMusic.load(); // Force preload
   } catch (err) {
     console.error('Failed to initialize sounds:', err);
   }
@@ -124,14 +131,22 @@ function App() {
   const [showShop, setShowShop] = useState(false);
   const [shopTab, setShopTab] = useState<'tools' | 'diggers'>('tools');
 
+  // Audio control states
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
   // Sound effect helpers
   const playMiningSound = useCallback(() => {
-    playSound(miningSound);
-  }, []);
+    if (soundEnabled) {
+      playSound(miningSound);
+    }
+  }, [soundEnabled]);
 
   const playSelectSound = useCallback(() => {
-    playSound(selectSound);
-  }, []);
+    if (soundEnabled) {
+      playSound(selectSound);
+    }
+  }, [soundEnabled]);
   const [isSmashing, setIsSmashing] = useState(false);
   const [currentOreId, setCurrentOreId] = useState<string>('dirt');
   const [currentOreVariant, setCurrentOreVariant] = useState<number>(1);
@@ -199,7 +214,7 @@ function App() {
     }, 0);
   }, [gameState.autoDiggers]);
 
-  // Set initial ore when ready
+  // Set initial ore when ready and start music
   useEffect(() => {
     if (ready) {
       const biome = getBiome(gameState.depth);
@@ -216,8 +231,24 @@ function App() {
         });
       }
       setUpcomingOres(ores);
+
+      // Start background music
+      if (backgroundMusic && musicEnabled) {
+        backgroundMusic.play().catch(err => console.log('Music autoplay blocked:', err));
+      }
     }
   }, [ready]);
+
+  // Handle music toggle
+  useEffect(() => {
+    if (backgroundMusic) {
+      if (musicEnabled) {
+        backgroundMusic.play().catch(err => console.log('Music play failed:', err));
+      } else {
+        backgroundMusic.pause();
+      }
+    }
+  }, [musicEnabled]);
 
   // Create falling ore effect (shared function) - DEFINED FIRST
   const createFallingOres = useCallback((oreId: string) => {
@@ -246,6 +277,9 @@ function App() {
   const handleOreClick = useCallback(() => {
     if (isSmashing) return; // Prevent clicking while animating
 
+    const ore = ORES[currentOreId];
+    const bonusMoney = Math.floor(ore.value * currentTool.bonusMultiplier);
+
     playMiningSound(); // Play mining sound instantly
     setIsSmashing(true);
 
@@ -273,14 +307,8 @@ function App() {
 
     // Trigger falling ore effect
     createFallingOres(currentOreId);
-  }, [isSmashing, currentOreId, createFallingOres, playMiningSound]);
 
-  // Handle smash animation complete - collect ore and spawn new one
-  const handleSmashComplete = useCallback(() => {
-    const ore = ORES[currentOreId];
-    const bonusMoney = Math.floor(ore.value * currentTool.bonusMultiplier);
-
-    // Collect the ore and mark as discovered
+    // Collect the ore immediately and mark as discovered
     setGameState((prev) => {
       const newDiscoveredOres = new Set(prev.discoveredOres);
       newDiscoveredOres.add(currentOreId);
@@ -297,7 +325,7 @@ function App() {
       };
     });
 
-    // Move to next ore from the upcoming queue
+    // Move to next ore from the upcoming queue immediately
     setUpcomingOres((prev) => {
       const [nextOre, ...remaining] = prev;
       if (nextOre) {
@@ -315,8 +343,16 @@ function App() {
       return [...remaining, newOre];
     });
 
-    setIsSmashing(false);
-  }, [currentOreId, currentTool, gameState.depth]);
+    // Allow next click after a very short delay (50ms) for instant feel
+    setTimeout(() => {
+      setIsSmashing(false);
+    }, 50);
+  }, [isSmashing, currentOreId, currentTool, gameState.depth, createFallingOres, playMiningSound]);
+
+  // Handle smash animation complete - now just a placeholder for the Character component
+  const handleSmashComplete = useCallback(() => {
+    // Animation complete - nothing to do here since ore collection happens in handleOreClick
+  }, []);
 
   // Buy tool upgrade
   const buyTool = useCallback(
@@ -729,8 +765,8 @@ function App() {
         <h1 className="game-title"><i className="fas fa-hammer"></i> THE DIGGER <i className="fas fa-hammer"></i></h1>
         <div className="stats">
           <div className="stat">
-            <span className="stat-label"><i className="fas fa-coins"></i> Money:</span>
-            <span className="stat-value">${formatNumber(gameState.money)}</span>
+            <span className="stat-label"><i className="fas fa-arrow-down"></i> Depth:</span>
+            <span className="stat-value">{formatNumber(Math.floor(gameState.depth))} ft</span>
           </div>
           <div className="stat biome">
             <span className="stat-label"><i className="fas fa-mountain"></i> Biome:</span>
@@ -745,18 +781,34 @@ function App() {
           <button className="pixel-btn biome-chart-btn" onClick={() => { playSelectSound(); setShowBiomeChart(!showBiomeChart); }}>
             <i className="fas fa-mountain"></i> BIOMES
           </button>
+          <button
+            className={`pixel-btn audio-btn ${musicEnabled ? 'enabled' : 'disabled'}`}
+            onClick={() => { playSelectSound(); setMusicEnabled(!musicEnabled); }}
+            title={musicEnabled ? 'Disable Music' : 'Enable Music'}
+          >
+            <i className={`fas fa-${musicEnabled ? 'music' : 'volume-mute'}`}></i>
+          </button>
+          <button
+            className={`pixel-btn audio-btn ${soundEnabled ? 'enabled' : 'disabled'}`}
+            onClick={() => {
+              if (soundEnabled) playSound(selectSound); // Play sound before disabling
+              setSoundEnabled(!soundEnabled);
+            }}
+            title={soundEnabled ? 'Disable Sounds' : 'Enable Sounds'}
+          >
+            <i className={`fas fa-${soundEnabled ? 'volume-up' : 'volume-off'}`}></i>
+          </button>
           <button className="pixel-btn reset-btn" onClick={() => { playSelectSound(); handleResetGame(); }} title="Reset game progress">
             <i className="fas fa-redo"></i> RESET
           </button>
         </div>
       </div>
 
-      {/* Big Depth Display */}
+      {/* Big Money Display */}
       <div className="depth-display">
-        <div className="depth-label">DEPTH</div>
+        <div className="depth-label">MONEY EARNED</div>
         <div className="depth-value">
-          <span className="depth-number">{Math.floor(gameState.depth).toLocaleString()}</span>
-          <span className="depth-unit">ft</span>
+          <span className="depth-number">${formatNumber(gameState.money)}</span>
         </div>
       </div>
 
@@ -944,34 +996,35 @@ function App() {
                     return (
                       <button
                         key={tool.id}
-                        className={`shop-item cookie-clicker-style ${isCurrentTool ? 'owned' : ''} ${
-                          canAfford && !isOlderTool && !isCurrentTool && shouldShow ? 'affordable' : 'expensive'
-                        } ${isOlderTool ? 'obsolete' : ''} ${!shouldShow ? 'locked' : ''}`}
+                        className={`tool-item ${canAfford && !isOlderTool && !isCurrentTool && shouldShow ? 'affordable' : 'expensive'} ${!shouldShow ? 'locked' : ''} ${isCurrentTool ? 'owned' : ''} ${isOlderTool ? 'obsolete' : ''}`}
                         onClick={() => shouldShow && buyTool(tool)}
                         disabled={isCurrentTool || isOlderTool || !canAfford || !shouldShow}
+                        title={shouldShow ? `${tool.bonusMultiplier}x Money Bonus` : '???'}
                       >
-                        <div className="item-icon-container">
+                        <div className="tool-image-container">
                           <img
                             src={shouldShow ? getOreImagePath(tool.oreId, 1) : '/ores/Unknown.png'}
                             alt={shouldShow ? (ORES[tool.oreId]?.name || 'Ore') : '???'}
-                            className={`item-icon ${!shouldShow ? 'locked-icon' : ''}`}
+                            className={`tool-image ${!shouldShow ? 'locked-image' : ''}`}
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
                             }}
                           />
-                          {!shouldShow && <div className="locked-overlay">?</div>}
+                          {!shouldShow && <div className="tool-locked-overlay">?</div>}
                         </div>
-                        <div className="item-details">
-                          <div className="item-name-bold">
+                        <div className="tool-info">
+                          <div className="tool-name">
                             {shouldShow ? tool.name : '???'}
                           </div>
-                          {isCurrentTool && <div className="item-count">EQUIPPED</div>}
-                          <div className="item-stats-small">
+                          <div className="tool-stats">
                             {shouldShow ? `${tool.bonusMultiplier}x Money Bonus` : '???'}
                           </div>
-                          <div className="item-price">
-                            {!shouldShow ? '???' : isCurrentTool ? '✓ OWNED' : isOlderTool ? 'OBSOLETE' : `$${formatNumber(tool.cost)}`}
+                          <div className="tool-cost">
+                            {!shouldShow ? '???' : isCurrentTool ? 'EQUIPPED' : isOlderTool ? 'OBSOLETE' : `$${formatNumber(tool.cost)}`}
                           </div>
+                        </div>
+                        <div className="tool-status">
+                          {isCurrentTool ? '✓' : ''}
                         </div>
                       </button>
                     );
@@ -994,34 +1047,35 @@ function App() {
                     return (
                       <button
                         key={digger.id}
-                        className={`shop-item cookie-clicker-style ${canAfford && shouldShow ? 'affordable' : 'expensive'} ${!shouldShow ? 'locked' : ''} ${count > 0 ? 'owned' : ''}`}
+                        className={`digger-item ${canAfford && shouldShow ? 'affordable' : 'expensive'} ${!shouldShow ? 'locked' : ''} ${count > 0 ? 'owned' : ''}`}
                         onClick={() => shouldShow && buyAutoDigger(digger)}
                         disabled={!canAfford || !shouldShow}
+                        title={shouldShow ? `+${formatDecimal(digger.depthPerSecond)}ft/s per digger` : '???'}
                       >
-                        <div className="item-icon-container">
+                        <div className="digger-image-container">
                           <img
                             src={diggerImagePath}
                             alt={shouldShow ? digger.name : '???'}
-                            className={`item-icon ${!shouldShow ? 'locked-icon' : ''}`}
+                            className={`digger-image ${!shouldShow ? 'locked-image' : ''}`}
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
                             }}
                           />
-                          {!shouldShow && <div className="locked-overlay">?</div>}
+                          {!shouldShow && <div className="digger-locked-overlay">?</div>}
                         </div>
-                        <div className="item-details">
-                          <div className="item-name-bold">
+                        <div className="digger-info">
+                          <div className="digger-name">
                             {shouldShow ? digger.name : '???'}
                           </div>
-                          <div className="item-count">
-                            {count > 0 && shouldShow && `x${count}`}
+                          <div className="digger-stats">
+                            +{shouldShow ? formatDecimal(digger.depthPerSecond) : '???'}ft/s
                           </div>
-                          <div className="item-stats-small">
-                            {shouldShow ? `+${formatDecimal(digger.depthPerSecond)}ft/s` : '???'}
-                          </div>
-                          <div className="item-price">
+                          <div className="digger-cost">
                             {shouldShow ? `$${formatNumber(cost)}` : '???'}
                           </div>
+                        </div>
+                        <div className="digger-count">
+                          {count > 0 && shouldShow ? count : ''}
                         </div>
                       </button>
                     );
