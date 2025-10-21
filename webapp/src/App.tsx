@@ -184,6 +184,7 @@ function App() {
   const [showInfo, setShowInfo] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showCover, setShowCover] = useState(true);
   const [shopTab, setShopTab] = useState<'tools' | 'diggers'>('tools');
   const [infoTab, setInfoTab] = useState<'ores' | 'biomes'>('ores');
 
@@ -207,6 +208,19 @@ function App() {
       playSelectSoundFast(); // Use pooled sound
     }
   }, [soundEnabled]);
+
+  const noop = useCallback(() => {}, []);
+
+  const handleEnterGame = useCallback(() => {
+    playSelectSound();
+    setShowCover(false);
+
+    if (backgroundMusic && musicEnabled) {
+      backgroundMusic.play().catch(() => {
+        /* Autoplay blocked */
+      });
+    }
+  }, [musicEnabled, playSelectSound]);
 
   const [isSmashing, setIsSmashing] = useState(false);
   const [currentOreId, setCurrentOreId] = useState<string>('dirt');
@@ -283,26 +297,22 @@ function App() {
     const initialOre = getRandomOre(biome.ores);
     setCurrentOreId(initialOre);
     setCurrentOreVariant(Math.floor(Math.random() * 3) + 1);
-
-    if (backgroundMusic && musicEnabled) {
-      backgroundMusic.play().catch(() => {
-        /* Autoplay blocked */
-      });
-    }
   }, [ready]);
 
   // Handle music toggle
   useEffect(() => {
-    if (backgroundMusic) {
-      if (musicEnabled) {
-        backgroundMusic.play().catch(() => {
-          /* Autoplay blocked */
-        });
-      } else {
-        backgroundMusic.pause();
-      }
+    if (!backgroundMusic) {
+      return;
     }
-  }, [musicEnabled]);
+
+    if (musicEnabled && !showCover) {
+      backgroundMusic.play().catch(() => {
+        /* Autoplay blocked */
+      });
+    } else {
+      backgroundMusic.pause();
+    }
+  }, [musicEnabled, showCover]);
 
   // Check for newly unlocked achievements
   useEffect(() => {
@@ -857,6 +867,21 @@ function App() {
   return (
     <div className="app">
       <div className="game-box" style={{ backgroundColor: currentBiome.backgroundColor }}>
+        {showCover && (
+          <div className="cover-screen">
+            <div className="cover-content">
+              <span className="cover-tagline">Dig. Upgrade. Conquer.</span>
+              <h1 className="cover-title">The Digger</h1>
+              <div className="cover-character">
+                <Character isSmashing={false} onSmashComplete={noop} />
+              </div>
+              <button className="pixel-btn cover-play-button" onClick={handleEnterGame}>
+                <i className="fas fa-play"></i> Play
+              </button>
+              <p className="cover-subtitle">Descend into the depths and uncover legendary riches.</p>
+            </div>
+          </div>
+        )}
         {/* Falling ores background inside game box */}
         <div className="falling-ores-container">
           {fallingOres.map((ore) => (
