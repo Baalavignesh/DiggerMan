@@ -145,6 +145,11 @@ Devvit.addCustomPostType({
               type: 'saveConfirmed',
               data: { leaderboard },
             });
+
+            context.ui.webView.postMessage({
+              type: 'leaderboardUpdate',
+              data: { leaderboard },
+            });
             break;
           }
           case 'resetGame': {
@@ -220,6 +225,11 @@ Devvit.addCustomPostType({
                 playerName: attemptedName,
                 leaderboard,
               },
+            });
+
+            context.ui.webView.postMessage({
+              type: 'leaderboardUpdate',
+              data: { leaderboard },
             });
 
             break;

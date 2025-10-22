@@ -44,13 +44,28 @@ module.exports = (env, argv) => {
         },
         {
           test: /\.css$/,
-          use: ['style-loader', 'css-loader'],
+          use: [
+            'style-loader',
+            {
+              loader: 'css-loader',
+              options: {
+                url: true,
+              }
+            }
+          ],
         },
         {
           test: /\.(woff|woff2|eot|ttf|otf)$/,
           type: 'asset/resource',
           generator: {
             filename: 'assets/fonts/[name][ext]',
+          },
+        },
+        {
+          test: /\.svg$/,
+          type: 'asset/resource',
+          generator: {
+            filename: 'assets/icons/[name][ext]',
           },
         },
       ],
@@ -65,6 +80,10 @@ module.exports = (env, argv) => {
           {
             from: path.resolve(__dirname, 'public'),
             to: path.resolve(__dirname, '../webroot'),
+          },
+          {
+            from: path.resolve(__dirname, '../node_modules/@fortawesome/fontawesome-free/webfonts'),
+            to: path.resolve(__dirname, '../webroot/webfonts'),
           },
         ],
       }),
