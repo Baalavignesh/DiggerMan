@@ -1,0 +1,20 @@
+/* Font Awesome local fallback */
+
+.fas,
+.fa,
+.far {
+  font-family: 'Font Awesome 6 Free', 'Font Awesome 6 Brands';
+  font-weight: 900;
+}
+
+.far {
+  font-weight: 400;
+}
+
+.fas,
+.fa,
+.far {
+  display: inline-block;
+  text-rendering: auto;
+  line-height: 1;
+}

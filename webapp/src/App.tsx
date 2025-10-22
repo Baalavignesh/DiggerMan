@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { postToDevvit, onDevvitMessage } from './devvitMessaging';
-import type { DevvitMessage, GameState } from '../../src/message';
+import type { DevvitMessage, GameState, LeaderboardSnapshot } from '../../src/message';
 import { TOOLS, AUTO_DIGGERS, ORES, BIOMES, getBiome, getAutoDiggerCost } from './gameData';
 import type { Tool, AutoDigger } from './gameData';
 import Character from './Character';
@@ -22,7 +22,18 @@ const MAX_ACTIVE_SPARKS = 30;
 const MAX_FALLING_ORES = 40;
 
 const isMobileDevice = () =>
-  typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+  typeof window !== 'undefined' && window.matchMedia('(any-pointer: coarse)').matches;
+
+const sanitizePlayerName = (raw: string): string | null => {
+  const trimmed = raw.trim();
+  if (trimmed.length < 3 || trimmed.length > 16) {
+    return null;
+  }
+  if (/[^a-zA-Z0-9 _-]/.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+};
 
 if (typeof window !== 'undefined') {
   try {
@@ -101,6 +112,7 @@ interface AppState extends GameState {
   discoveredBiomes: Set<number>;
   totalClicks: number; // Track total ore clicks for achievements
   unlockedAchievements: Set<string>; // Track unlocked achievement IDs
+  playerName: string;
 }
 
 // Format large numbers for display
@@ -178,13 +190,36 @@ function App() {
     discoveredBiomes: new Set<number>([1]), // Start with Surface biome discovered
     totalClicks: 0,
     unlockedAchievements: new Set<string>(),
+    playerName: '',
   });
 
   const [showShop, setShowShop] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showCover, setShowCover] = useState(true);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardSnapshot>({ money: [], depth: [] });
+  const [playerNameInput, setPlayerNameInput] = useState('');
+  const [playerNameError, setPlayerNameError] = useState('');
+  const [isRegisteringName, setIsRegisteringName] = useState(false);
+  const [manualSavePending, setManualSavePending] = useState(false);
+  const [lastSaveTimestamp, setLastSaveTimestamp] = useState<number | null>(null);
+
+  const isStandalone = typeof window === 'undefined' ? true : window.self === window.top;
+
+  const musicEnabledRef = useRef(musicEnabled);
+  useEffect(() => {
+    musicEnabledRef.current = musicEnabled;
+  }, [musicEnabled]);
+
+  const showNamePrompt = !gameState.playerName;
+
+  useEffect(() => {
+    if (gameState.playerName) {
+      setPlayerNameInput(gameState.playerName);
+    }
+  }, [gameState.playerName]);
   const [shopTab, setShopTab] = useState<'tools' | 'diggers'>('tools');
   const [infoTab, setInfoTab] = useState<'ores' | 'biomes'>('ores');
 
@@ -211,8 +246,10 @@ function App() {
 
   const noop = useCallback(() => {}, []);
 
-  const handleEnterGame = useCallback(() => {
-    playSelectSound();
+  const startGame = useCallback((withSound: boolean) => {
+    if (withSound) {
+      playSelectSound();
+    }
     setShowCover(false);
 
     if (backgroundMusic && musicEnabled) {
@@ -221,6 +258,10 @@ function App() {
       });
     }
   }, [musicEnabled, playSelectSound]);
+
+  const handleEnterGame = useCallback(() => {
+    startGame(true);
+  }, [startGame]);
 
   const [isSmashing, setIsSmashing] = useState(false);
   const [currentOreId, setCurrentOreId] = useState<string>('dirt');
@@ -248,6 +289,89 @@ function App() {
   );
 
   const currentBiome = useMemo(() => getBiome(gameState.depth), [gameState.depth]);
+
+  const serializeGameState = useCallback(() => {
+    return {
+      ...gameState,
+      lastSaveTime: Date.now(),
+      playerName: gameState.playerName,
+      discoveredOres: Array.from(gameState.discoveredOres),
+      discoveredTools: Array.from(gameState.discoveredTools),
+      discoveredDiggers: Array.from(gameState.discoveredDiggers),
+      discoveredBiomes: Array.from(gameState.discoveredBiomes),
+      unlockedAchievements: Array.from(gameState.unlockedAchievements),
+    };
+  }, [gameState]);
+
+  const sendSaveGame = useCallback(
+    (manual = false) => {
+      if (!ready) {
+        return;
+      }
+
+      if (!gameState.playerName && !isStandalone) {
+        return;
+      }
+
+      const saveData = serializeGameState();
+
+      if (isStandalone) {
+        localStorage.setItem('theDiggerSave', JSON.stringify(saveData));
+        setLastSaveTimestamp(Date.now());
+        setManualSavePending(false);
+      } else {
+        if (manual) {
+          setManualSavePending(true);
+        }
+        postToDevvit({
+          type: 'saveGame',
+          data: {
+            gameState: saveData,
+          },
+        });
+      }
+    },
+    [gameState, isStandalone, ready, serializeGameState]
+  );
+
+  const handleManualSave = useCallback(() => {
+    playSelectSound();
+    sendSaveGame(true);
+  }, [playSelectSound, sendSaveGame]);
+
+  const handleNameSubmit = useCallback(
+    (event?: React.FormEvent) => {
+      if (event) {
+        event.preventDefault();
+      }
+
+      const sanitized = sanitizePlayerName(playerNameInput);
+
+      if (!sanitized) {
+        setPlayerNameError('Pick a name 3-16 chars long using letters, numbers, spaces, - or _.');
+        return;
+      }
+
+      if (isStandalone) {
+        setPlayerNameError('');
+        setGameState((prev) => ({ ...prev, playerName: sanitized }));
+        setPlayerNameInput(sanitized);
+        sendSaveGame(true);
+        setShowCover(false);
+        if (backgroundMusic && musicEnabledRef.current) {
+          backgroundMusic.play().catch(() => {
+            /* Autoplay blocked */
+          });
+        }
+        return;
+      }
+
+      setIsRegisteringName(true);
+      setPlayerNameError('');
+      postToDevvit({ type: 'registerPlayer', data: { name: sanitized } });
+    },
+    [playerNameInput, isStandalone, setGameState, sendSaveGame]
+  );
 
   // Reset game function
   const handleResetGame = useCallback(() => {
@@ -733,40 +857,24 @@ function App() {
 
   // Auto-save every 5 seconds
   useEffect(() => {
-    if (ready) {
-      const isStandalone = window.self === window.top;
-
-      saveIntervalRef.current = setInterval(() => {
-        const saveData = {
-          ...gameState,
-          lastSaveTime: Date.now(),
-          // Convert Sets to arrays for JSON serialization
-          discoveredOres: Array.from(gameState.discoveredOres),
-          discoveredTools: Array.from(gameState.discoveredTools),
-          discoveredDiggers: Array.from(gameState.discoveredDiggers),
-          discoveredBiomes: Array.from(gameState.discoveredBiomes),
-          unlockedAchievements: Array.from(gameState.unlockedAchievements),
-        };
-
-        if (isStandalone) {
-          localStorage.setItem('theDiggerSave', JSON.stringify(saveData));
-        } else {
-          postToDevvit({
-            type: 'saveGame',
-            data: {
-              gameState: saveData,
-            },
-          });
-        }
-      }, 5000);
-
-      return () => {
-        if (saveIntervalRef.current) {
-          clearInterval(saveIntervalRef.current);
-        }
-      };
+    if (!ready) {
+      return;
     }
-  }, [ready, gameState]);
+
+    if (!gameState.playerName && !isStandalone) {
+      return;
+    }
+
+    saveIntervalRef.current = setInterval(() => {
+      sendSaveGame(false);
+    }, 5000);
+
+    return () => {
+      if (saveIntervalRef.current) {
+        clearInterval(saveIntervalRef.current);
+      }
+    };
+  }, [ready, gameState.playerName, isStandalone, sendSaveGame]);
 
   // Initial setup and message handling
   useEffect(() => {
@@ -785,6 +893,7 @@ function App() {
       discoveredBiomes: new Set<number>([1]),
       totalClicks: 0,
       unlockedAchievements: new Set<string>(),
+      playerName: '',
     };
 
     if (isStandalone) {
@@ -806,7 +915,11 @@ function App() {
             discoveredBiomes: new Set(parsed.discoveredBiomes || [1]),
             totalClicks: parsed.totalClicks || 0,
             unlockedAchievements: new Set(parsed.unlockedAchievements || []),
+            playerName: parsed.playerName || '',
           });
+          if (parsed.playerName) {
+            setPlayerNameInput(parsed.playerName);
+          }
         } catch (e) {
           console.error('Failed to parse saved data:', e);
         }
@@ -834,7 +947,18 @@ function App() {
               discoveredBiomes: new Set(message.data.savedState.discoveredBiomes || [1]),
               totalClicks: message.data.savedState.totalClicks || 0,
               unlockedAchievements: new Set(message.data.savedState.unlockedAchievements || []),
+              playerName: message.data.savedState.playerName || message.data.playerName || '',
             });
+            if (message.data.savedState.playerName || message.data.playerName) {
+              setPlayerNameInput(message.data.savedState.playerName || message.data.playerName || '');
+            }
+          }
+          if (message.data.leaderboard) {
+            setLeaderboard(message.data.leaderboard);
+          }
+          if (!message.data.savedState && message.data.playerName) {
+            setGameState((prev) => ({ ...prev, playerName: message.data.playerName ?? '' }));
+            setPlayerNameInput(message.data.playerName);
           }
           setReady(true);
           break;
@@ -842,10 +966,37 @@ function App() {
           console.error('Error from Devvit:', message.data.message);
           break;
         case 'saveConfirmed':
+          if (message.data.leaderboard) {
+            setLeaderboard(message.data.leaderboard);
+          }
+          setManualSavePending(false);
+          setLastSaveTimestamp(Date.now());
           break;
         case 'resetConfirmed':
           // Reload the page to reset the game
           window.location.reload();
+          break;
+        case 'registerResult':
+          setIsRegisteringName(false);
+          if (message.data.success && message.data.playerName) {
+            setGameState((prev) => ({ ...prev, playerName: message.data.playerName! }));
+            setPlayerNameInput(message.data.playerName);
+            setPlayerNameError('');
+            if (message.data.leaderboard) {
+              setLeaderboard(message.data.leaderboard);
+            }
+            setShowCover(false);
+            if (backgroundMusic && musicEnabledRef.current) {
+              backgroundMusic.play().catch(() => {
+                /* Autoplay blocked */
+              });
+            }
+          } else if (!message.data.success && message.data.error) {
+            setPlayerNameError(message.data.error);
+          }
+          break;
+        case 'leaderboardUpdate':
+          setLeaderboard(message.data.leaderboard);
           break;
       }
     });
@@ -867,7 +1018,29 @@ function App() {
   return (
     <div className="app">
       <div className="game-box" style={{ backgroundColor: currentBiome.backgroundColor }}>
-        {showCover && (
+        {showNamePrompt && (
+          <div className="name-overlay">
+            <form className="name-content" onSubmit={(event) => handleNameSubmit(event)}>
+              <h2 className="name-title">Claim Your Digger Name</h2>
+              <p className="name-subtitle">Reserve a unique name to join the global leaderboard.</p>
+              <input
+                className="name-input"
+                value={playerNameInput}
+                onChange={(event) => setPlayerNameInput(event.target.value)}
+                maxLength={16}
+                placeholder="e.g. CoreCrusher"
+                disabled={isRegisteringName}
+              />
+              {playerNameError && <div className="name-error">{playerNameError}</div>}
+              <button className="pixel-btn name-submit" type="submit" disabled={isRegisteringName}>
+                {isRegisteringName ? 'Registering…' : 'Enter the Mines'}
+              </button>
+              <p className="name-hint">Names must be unique. Letters, numbers, spaces, dashes, and underscores only.</p>
+            </form>
+          </div>
+        )}
+
+        {showCover && !showNamePrompt && (
           <div className="cover-screen">
             <div className="cover-content">
               <span className="cover-tagline">Dig. Upgrade. Conquer.</span>
@@ -904,17 +1077,30 @@ function App() {
 
       <div className="game-header">
         <h1 className="game-title"><i className="fas fa-hammer"></i> THE DIGGER <i className="fas fa-hammer"></i></h1>
-        <div className="stats">
-          <div className="stat">
-            <span className="stat-label"><i className="fas fa-arrow-down"></i> Depth:</span>
-            <span className="stat-value">{formatNumber(Math.floor(gameState.depth))} ft</span>
-          </div>
-          <div className="stat biome">
-            <span className="stat-label"><i className="fas fa-mountain"></i> Biome:</span>
-            <span className="stat-value">{currentBiome.name}</span>
-          </div>
+        <div className="header-actions">
+          <button
+            className="pixel-btn icon-btn save-icon"
+            title="Save now"
+            onClick={handleManualSave}
+            disabled={manualSavePending}
+          >
+            <i className="fas fa-save"></i>
+          </button>
+          <button
+            className="pixel-btn icon-btn leaderboard-icon"
+            title="Leaderboard"
+            onClick={() => {
+              playSelectSound();
+              setShowLeaderboard(true);
+              if (!isStandalone) {
+                postToDevvit({ type: 'requestLeaderboard' });
+              }
+            }}
+          >
+            <i className="fas fa-crown"></i>
+          </button>
           <button className="pixel-btn menu-btn" onClick={() => { playSelectSound(); setShowMenu(true); }}>
-            <i className="fas fa-bars"></i> MENU
+            <i className="fas fa-bars"></i>
           </button>
         </div>
       </div>
@@ -946,6 +1132,16 @@ function App() {
             <div className="depth-label">MONEY EARNED</div>
             <div className="depth-value">
               <span className="depth-number">${formatMoney(gameState.money)}</span>
+            </div>
+            <div className="depth-secondary">
+              <div className="secondary-stat">
+                <span className="secondary-label"><i className="fas fa-arrow-down"></i> Depth</span>
+                <span className="secondary-value">{formatNumber(Math.floor(gameState.depth))} ft</span>
+              </div>
+              <div className="secondary-stat">
+                <span className="secondary-label"><i className="fas fa-mountain"></i> Biome</span>
+                <span className="secondary-value">{currentBiome.name}</span>
+              </div>
             </div>
           </div>
 
@@ -1011,6 +1207,51 @@ function App() {
             <i className={`fas fa-${soundEnabled ? 'volume-up' : 'volume-off'}`}></i> SOUND: {soundEnabled ? 'ON' : 'OFF'}
           </button>
         </div>
+        {lastSaveTimestamp && (
+          <div className="menu-save-status">Last save: {new Date(lastSaveTimestamp).toLocaleTimeString()}</div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={showLeaderboard}
+        onClose={() => { playSelectSound(); setShowLeaderboard(false); }}
+        title="LEADERBOARD"
+        icon="fa-crown"
+        className="leaderboard-modal"
+      >
+        <div className="leaderboard-section">
+          <div className="leaderboard-section-title"><i className="fas fa-coins"></i> Most Money Earned</div>
+          <div className="leaderboard-grid">
+            {leaderboard.money.length === 0 && <div className="leaderboard-empty">No entries yet. Be the first to strike it rich!</div>}
+            {leaderboard.money.map((entry, index) => (
+              <div key={`money-${entry.name}`} className="leaderboard-card">
+                <div className="leaderboard-rank">#{index + 1}</div>
+                <div className="leaderboard-icon">
+                  <i className="fas fa-coins"></i>
+                </div>
+                <div className="leaderboard-label">{entry.name}</div>
+                <div className="leaderboard-value">${formatMoney(entry.score)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="leaderboard-section">
+          <div className="leaderboard-section-title"><i className="fas fa-arrow-down"></i> Deepest Diggers</div>
+          <div className="leaderboard-grid">
+            {leaderboard.depth.length === 0 && <div className="leaderboard-empty">No explorers yet. Start digging!</div>}
+            {leaderboard.depth.map((entry, index) => (
+              <div key={`depth-${entry.name}`} className="leaderboard-card">
+                <div className="leaderboard-rank">#{index + 1}</div>
+                <div className="leaderboard-icon">
+                  <i className="fas fa-mountain"></i>
+                </div>
+                <div className="leaderboard-label">{entry.name}</div>
+                <div className="leaderboard-value">{formatNumber(entry.score)} ft</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="leaderboard-note">Stats save every 5 seconds or when you press Save Now.</p>
       </Modal>
 
       {/* Info Modal - Ores and Biomes */}
