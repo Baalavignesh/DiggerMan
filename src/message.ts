@@ -17,9 +17,17 @@ export interface LeaderboardEntry {
   score: number;
 }
 
+export interface LeaderboardStanding extends LeaderboardEntry {
+  rank: number;
+}
+
 export interface LeaderboardSnapshot {
   money: LeaderboardEntry[];
   depth: LeaderboardEntry[];
+  self?: {
+    money?: LeaderboardStanding;
+    depth?: LeaderboardStanding;
+  };
 }
 
 /** Message from Devvit to the web view. */

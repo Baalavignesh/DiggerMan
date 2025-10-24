@@ -7,6 +7,7 @@ import type {
   WebViewMessage,
   GameState,
   LeaderboardSnapshot,
+  LeaderboardStanding,
 } from './message.js';
 
 const sanitizeName = (raw: string): string | undefined => {
@@ -36,25 +37,64 @@ const getKeys = (postId: string) => {
 
 const fetchLeaderboard = async (
   context: Devvit.Context,
-  postId: string
+  postId: string,
+  playerName?: string
 ): Promise<LeaderboardSnapshot> => {
   const { money, depth } = getKeys(postId);
 
   const [topMoney = [], topDepth = []] = await Promise.all([
     context.redis.zRange(money, 0, 9, {
-      by: 'score',
+      by: 'rank',
       reverse: true,
     }),
     context.redis.zRange(depth, 0, 9, {
-      by: 'score',
+      by: 'rank',
       reverse: true,
     }),
   ]);
 
-  return {
+  const resolveStanding = async (key: string) => {
+    if (!playerName) {
+      return undefined;
+    }
+
+    const rankAscending = await context.redis.zRank(key, playerName);
+    if (rankAscending === undefined) {
+      return undefined;
+    }
+
+    const score = await context.redis.zScore(key, playerName);
+    if (score === undefined) {
+      return undefined;
+    }
+
+    const total = await context.redis.zCard(key);
+    const displayRank = Math.max(1, total - rankAscending);
+
+    return {
+      name: playerName,
+      score,
+      rank: displayRank,
+    } satisfies LeaderboardStanding;
+  };
+
+  const [moneyStanding, depthStanding] = await Promise.all([
+    resolveStanding(money),
+    resolveStanding(depth),
+  ]);
+
+  const snapshot: LeaderboardSnapshot = {
     money: topMoney.map((entry) => ({ name: entry.member, score: entry.score })),
     depth: topDepth.map((entry) => ({ name: entry.member, score: entry.score })),
   };
+
+  if (moneyStanding || depthStanding) {
+    snapshot.self = {};
+    if (moneyStanding) snapshot.self.money = moneyStanding;
+    if (depthStanding) snapshot.self.depth = depthStanding;
+  }
+
+  return snapshot;
 };
 
 const ensureScore = async (
@@ -106,7 +146,11 @@ Devvit.addCustomPostType({
               savedState.playerName = storedName;
             }
 
-            const leaderboard = await fetchLeaderboard(context, context.postId);
+            const leaderboard = await fetchLeaderboard(
+              context,
+              context.postId,
+              storedName ?? savedState?.playerName
+            );
 
             webView.postMessage({
               type: 'initialData',
@@ -139,7 +183,11 @@ Devvit.addCustomPostType({
               ]);
             }
 
-            const leaderboard = await fetchLeaderboard(context, context.postId);
+            const leaderboard = await fetchLeaderboard(
+              context,
+              context.postId,
+              message.data.gameState.playerName
+            );
 
             webView.postMessage({
               type: 'saveConfirmed',
@@ -216,7 +264,11 @@ Devvit.addCustomPostType({
               context.redis.zAdd(keys.depth, { member: attemptedName, score: 0 }),
             ]);
 
-            const leaderboard = await fetchLeaderboard(context, context.postId);
+            const leaderboard = await fetchLeaderboard(
+              context,
+              context.postId,
+              attemptedName
+            );
 
             webView.postMessage({
               type: 'registerResult',
@@ -235,7 +287,15 @@ Devvit.addCustomPostType({
             break;
           }
           case 'requestLeaderboard': {
-            const leaderboard = await fetchLeaderboard(context, context.postId);
+            const userId = context.userId || 'anonymous';
+            const keys = getKeys(context.postId);
+            const storedName = await context.redis.get(`${keys.userIndex}:${userId}`);
+
+            const leaderboard = await fetchLeaderboard(
+              context,
+              context.postId,
+              storedName ?? undefined
+            );
             webView.postMessage({
               type: 'leaderboardUpdate',
               data: { leaderboard },

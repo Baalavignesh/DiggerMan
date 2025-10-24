@@ -1,6 +1,12 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { postToDevvit, onDevvitMessage } from './devvitMessaging';
-import type { DevvitMessage, GameState, LeaderboardSnapshot } from '../../src/message';
+import type {
+  DevvitMessage,
+  GameState,
+  LeaderboardSnapshot,
+  LeaderboardStanding,
+  LeaderboardEntry,
+} from '../../src/message';
 import { TOOLS, AUTO_DIGGERS, ORES, BIOMES, getBiome, getAutoDiggerCost } from './gameData';
 import type { Tool, AutoDigger } from './gameData';
 import Character from './Character';
@@ -200,6 +206,7 @@ function App() {
   const [showMenu, setShowMenu] = useState(false);
   const [showCover, setShowCover] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardSnapshot>({ money: [], depth: [] });
+  const [approxRates, setApproxRates] = useState({ moneyPerSecond: 0, depthPerSecond: 0 });
   const [playerNameInput, setPlayerNameInput] = useState('');
   const [playerNameError, setPlayerNameError] = useState('');
   const [isRegisteringName, setIsRegisteringName] = useState(false);
@@ -282,6 +289,8 @@ function App() {
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const sparkKeyRef = useRef<number>(0);
   const fallingOreKeyRef = useRef<number>(0);
+  const latestValuesRef = useRef({ money: 0, depth: 0 });
+  const lastSnapshotRef = useRef({ money: 0, depth: 0, time: Date.now() });
 
   const currentTool = useMemo(
     () => TOOLS.find((t) => t.id === gameState.currentTool) ?? TOOLS[0],
@@ -289,6 +298,96 @@ function App() {
   );
 
   const currentBiome = useMemo(() => getBiome(gameState.depth), [gameState.depth]);
+
+  useEffect(() => {
+    latestValuesRef.current = { money: gameState.money, depth: gameState.depth };
+  }, [gameState.money, gameState.depth]);
+
+  useEffect(() => {
+    lastSnapshotRef.current = {
+      money: gameState.money,
+      depth: gameState.depth,
+      time: Date.now(),
+    };
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const snapshot = lastSnapshotRef.current;
+      const current = latestValuesRef.current;
+      const elapsed = (now - snapshot.time) / 1000;
+      if (elapsed <= 0.1) {
+        return;
+      }
+
+      const moneyPerSecond = (current.money - snapshot.money) / elapsed;
+      const depthPerSecond = (current.depth - snapshot.depth) / elapsed;
+
+      setApproxRates({ moneyPerSecond, depthPerSecond });
+
+      lastSnapshotRef.current = { money: current.money, depth: current.depth, time: now };
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const renderLeaderboardColumn = (
+    entries: LeaderboardEntry[],
+    icon: string,
+    heading: string,
+    formatScore: (score: number) => string,
+    standing?: LeaderboardStanding
+  ) => {
+    const topEntries = entries.slice(0, 10);
+    const items: React.ReactNode[] = [];
+
+    topEntries.forEach((entry, index) => {
+      const isSelf = standing?.name === entry.name;
+      items.push(
+        <li
+          key={`${heading}-${entry.name}`}
+          className={`leaderboard-row${isSelf ? ' self' : ''}`}
+        >
+          <span className="leaderboard-rank">#{index + 1}</span>
+          <span className="leaderboard-name">{isSelf ? `${entry.name} (You)` : entry.name}</span>
+          <span className="leaderboard-score">{formatScore(entry.score)}</span>
+        </li>
+      );
+    });
+
+    const shouldAppendSelf =
+      standing &&
+      standing.rank > 10 &&
+      !topEntries.some((entry) => entry.name === standing.name);
+
+    if (shouldAppendSelf && standing) {
+      items.push(
+        <li key={`${heading}-self`} className="leaderboard-row self">
+          <span className="leaderboard-rank">#{standing.rank}</span>
+          <span className="leaderboard-name">{standing.name} (You)</span>
+          <span className="leaderboard-score">{formatScore(standing.score)}</span>
+        </li>
+      );
+    }
+
+    if (items.length === 0) {
+      items.push(
+        <li key={`${heading}-empty`} className="leaderboard-empty">
+          No entries yet. Be the first to strike it rich!
+        </li>
+      );
+    }
+
+    return (
+      <div className="leaderboard-column">
+        <div className="leaderboard-section-title">
+          <i className={`fas ${icon}`}></i> {heading}
+        </div>
+        <ul className="leaderboard-list">{items}</ul>
+      </div>
+    );
+  };
 
   const serializeGameState = useCallback(() => {
     return {
@@ -1142,6 +1241,14 @@ function App() {
                 <span className="secondary-label"><i className="fas fa-mountain"></i> Biome</span>
                 <span className="secondary-value">{currentBiome.name}</span>
               </div>
+              <div className="secondary-stat">
+                <span className="secondary-label"><i className="fas fa-tachometer-alt"></i> Depth / s</span>
+                <span className="secondary-value">{formatDecimal(Math.max(0, approxRates.depthPerSecond))} ft/s</span>
+              </div>
+              <div className="secondary-stat">
+                <span className="secondary-label"><i className="fas fa-coins"></i> Money / s</span>
+                <span className="secondary-value">${formatMoney(Math.max(0, approxRates.moneyPerSecond))}/s</span>
+              </div>
             </div>
           </div>
 
@@ -1219,37 +1326,21 @@ function App() {
         icon="fa-crown"
         className="leaderboard-modal"
       >
-        <div className="leaderboard-section">
-          <div className="leaderboard-section-title"><i className="fas fa-coins"></i> Most Money Earned</div>
-          <div className="leaderboard-grid">
-            {leaderboard.money.length === 0 && <div className="leaderboard-empty">No entries yet. Be the first to strike it rich!</div>}
-            {leaderboard.money.map((entry, index) => (
-              <div key={`money-${entry.name}`} className="leaderboard-card">
-                <div className="leaderboard-rank">#{index + 1}</div>
-                <div className="leaderboard-icon">
-                  <i className="fas fa-coins"></i>
-                </div>
-                <div className="leaderboard-label">{entry.name}</div>
-                <div className="leaderboard-value">${formatMoney(entry.score)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="leaderboard-section">
-          <div className="leaderboard-section-title"><i className="fas fa-arrow-down"></i> Deepest Diggers</div>
-          <div className="leaderboard-grid">
-            {leaderboard.depth.length === 0 && <div className="leaderboard-empty">No explorers yet. Start digging!</div>}
-            {leaderboard.depth.map((entry, index) => (
-              <div key={`depth-${entry.name}`} className="leaderboard-card">
-                <div className="leaderboard-rank">#{index + 1}</div>
-                <div className="leaderboard-icon">
-                  <i className="fas fa-mountain"></i>
-                </div>
-                <div className="leaderboard-label">{entry.name}</div>
-                <div className="leaderboard-value">{formatNumber(entry.score)} ft</div>
-              </div>
-            ))}
-          </div>
+        <div className="leaderboard-columns">
+          {renderLeaderboardColumn(
+            leaderboard.money,
+            'fa-coins',
+            'Most Money Earned',
+            (score) => `$${formatMoney(score)}`,
+            leaderboard.self?.money
+          )}
+          {renderLeaderboardColumn(
+            leaderboard.depth,
+            'fa-arrow-down',
+            'Deepest Diggers',
+            (score) => `${formatNumber(score)} ft`,
+            leaderboard.self?.depth
+          )}
         </div>
         <p className="leaderboard-note">Stats save every 5 seconds or when you press Save Now.</p>
       </Modal>
